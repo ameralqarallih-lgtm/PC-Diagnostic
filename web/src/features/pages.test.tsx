@@ -148,6 +148,18 @@ describe('History page', () => {
     // Figures from the full process list carry their time.
     expect(screen.getByText(/as of/)).toBeInTheDocument();
 
+    // The moment's sections are a key away: S for services, P for processes (and the bar lists them, with the chart).
+    const bar = screen.getByRole('navigation', { name: 'Sections of this moment' });
+    expect(within(bar).getAllByRole('button').map((b) => b.getAttribute('aria-keyshortcuts'))).toEqual(['V', 'P', 'S', 'C']);
+    await userEvent.keyboard('s');
+    expect(screen.getByRole('searchbox', { name: 'Filter services' })).toBeInTheDocument();
+    await userEvent.keyboard('p');
+    expect(screen.getByRole('searchbox', { name: 'Filter processes' })).toBeInTheDocument();
+    // Typing in a filter is not a shortcut.
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Filter processes' }), 's');
+    expect(screen.getByRole('searchbox', { name: 'Filter processes' })).toHaveValue('s');
+    await userEvent.clear(screen.getByRole('searchbox', { name: 'Filter processes' }));
+
     // A process's services lead to the Services tab, and a service back to its process.
     await userEvent.click(screen.getByRole('button', { name: '2 services: DNS Client, Network Store Interface Service' }));
     expect(screen.getByRole('searchbox', { name: 'Filter services' })).toHaveValue('1300');

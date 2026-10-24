@@ -8,8 +8,10 @@ using PcDiag.Platform.Windows.Pdh;
 namespace PcDiag.Collectors.Cpu;
 
 /// <summary>
-/// System-wide and per-logical-processor CPU metrics from the "Processor Information" PDH object
-/// (Task Manager-consistent "% Processor Utility", effective frequency, performance limits).
+/// System-wide and per-logical-processor CPU metrics from the "Processor Information" PDH object: usage as
+/// "% Processor Time" (the share of time the processors were busy, as Task Manager shows it since Windows 11's 2025
+/// update, and as HWiNFO and other monitors do), effective frequency and performance limits. "% Processor Utility",
+/// used before, counts work against the base clock, so it ran well above Task Manager whenever the CPU boosted.
 /// Package temperature and power come from hardware sensor providers (Phase 6) and are unavailable here.
 /// </summary>
 public sealed partial class CpuCollector(ILogger<CpuCollector> logger) : ICpuCollector, IDisposable
@@ -31,7 +33,6 @@ public sealed partial class CpuCollector(ILogger<CpuCollector> logger) : ICpuCol
     private PdhCounter? _corePerformance;
     private PdhCounter? _coreFrequency;
     private Reading<double> _maxMhz = Reading<double>.Pending;
-    private bool _utilityIsProcessorTime;
 
     /// <inheritdoc />
     public string Id => "cpu";
@@ -55,13 +56,7 @@ public sealed partial class CpuCollector(ILogger<CpuCollector> logger) : ICpuCol
             return ValueTask.FromResult(new CollectorStatus(Availability.Error, ex.Message));
         }
 
-        _utility = Add(Total + "% Processor Utility");
-        if (_utility is null)
-        {
-            // Older systems without the utility counter: fall back to time-based utilization.
-            _utility = Add(Total + "% Processor Time");
-            _utilityIsProcessorTime = _utility is not null;
-        }
+        _utility = Add(Total + "% Processor Time");
 
         _user = Add(Total + "% User Time");
         _privileged = Add(Total + "% Privileged Time");
@@ -72,7 +67,7 @@ public sealed partial class CpuCollector(ILogger<CpuCollector> logger) : ICpuCol
         _interrupts = Add(Total + "Interrupts/sec");
         _queueLength = Add(@"\System\Processor Queue Length");
         _contextSwitches = Add(@"\System\Context Switches/sec");
-        _coreUtility = Add(_utilityIsProcessorTime ? @"\Processor Information(*)\% Processor Time" : @"\Processor Information(*)\% Processor Utility");
+        _coreUtility = Add(@"\Processor Information(*)\% Processor Time");
         _corePerformance = Add(@"\Processor Information(*)\% Processor Performance");
         _coreFrequency = Add(@"\Processor Information(*)\Processor Frequency");
 

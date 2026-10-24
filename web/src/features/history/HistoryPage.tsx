@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearch } from '@tanstack/react-router';
 import { Clock, ListFilter, SlidersHorizontal, Stethoscope, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { TimeSeriesChart, type ChartMarker } from '@/components/charts/TimeSeriesChart';
 import { DataTable, type Column } from '@/components/data/DataTable';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,7 @@ import { formatDateTime, formatTime } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
 import { cn } from '@/lib/utils';
 import { HISTORY_RANGES, RANGE_MS, refreshFor, type HistoryRange } from './ranges';
-import { MomentPanel } from './MomentPanel';
+import { MomentPanel, scrollToSection, type ExtraSection } from './MomentPanel';
 import { SeriesPicker } from './SeriesPicker';
 import { useCatalog, useHistoryEvents, useSeries } from './useHistory';
 
@@ -51,6 +51,14 @@ export function HistoryPage() {
   const to = search.end ?? Math.floor(now / 1000) * 1000;
   const from = to - RANGE_MS[search.range];
   const ids = useMemo(() => search.series.split(',').filter(Boolean), [search.series]);
+  // The chart and the moment picked on it, each a jump away from the other.
+  const chartRef = useRef<HTMLDivElement>(null);
+  const momentRef = useRef<HTMLElement>(null);
+  const chartSection = useMemo<ExtraSection[]>(() => [{ label: 'Chart', key: 'c', onSelect: () => scrollToSection(chartRef.current) }], []);
+  const pickedAt = search.at;
+  useEffect(() => {
+    if (pickedAt !== undefined) scrollToSection(momentRef.current);
+  }, [pickedAt]);
   const band = search.band ?? false;
   const minImportance = String(search.events ?? 2);
   // A zoom the moving live window has left behind no longer applies.
@@ -122,7 +130,7 @@ export function HistoryPage() {
       </div>
 
       <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
-        <Card className="flex flex-col">
+        <Card ref={chartRef} className="flex scroll-mt-4 flex-col">
           <CardHeader className="flex-wrap">
             <CardTitle>
               {formatDateTime(new Date(from).toISOString())} – {live ? 'now' : formatDateTime(new Date(to).toISOString())}
@@ -177,6 +185,8 @@ export function HistoryPage() {
           <CardContent className="pt-4">
             <MomentPanel
               at={search.at}
+              panelRef={momentRef}
+              extraSections={chartSection}
               actions={
                 <Button size="sm" variant="ghost" onClick={() => set({ at: undefined })} aria-label="Close this moment">
                   <X aria-hidden /> Close

@@ -54,6 +54,7 @@ public sealed partial class TelemetryStorageConsumer : ISampleConsumer, IAsyncDi
     private long _lastProcessListTs;
     private long _lastFullListTs;
     private readonly Dictionary<ProcessKey, (SelectedProcess Row, long Ts)> _fullListRows = [];
+    private readonly SentOnce _sentOnce = new();
     private long _lastFlush;
     private long _droppedWhileFailing;
 
@@ -93,6 +94,13 @@ public sealed partial class TelemetryStorageConsumer : ISampleConsumer, IAsyncDi
     public async ValueTask ConsumeAsync(SampleFrame frame, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(frame);
+
+        // What is sent once (process identities, the service list) is kept from every frame: a recording that starts
+
+        // later writes it.
+
+        _sentOnce.Note(frame, frame.Recorded);
+
 
         // Live-view frames (recorder idle, dashboard open) are never stored; what describes the PC (its hardware, drivers,
         // devices and displays) is, so the System page shows it either way.
@@ -204,6 +212,7 @@ public sealed partial class TelemetryStorageConsumer : ISampleConsumer, IAsyncDi
 
             LogFlushed(_logger, _pending.Count);
             _pending.Clear();
+            _sentOnce.Flushed();
             _devicesSeenInBatch.Clear();
         }
         catch (SqliteException ex)
@@ -212,6 +221,7 @@ public sealed partial class TelemetryStorageConsumer : ISampleConsumer, IAsyncDi
             await ResetConnectionAsync().ConfigureAwait(false);
             _devices.Clear(); // the transaction rolled back; device ids may not exist
             _volumesWritten.Clear();
+            _sentOnce.RolledBack();
             _sensorIds.Clear();
             _deadband.Reset();
             _devicesSeenInBatch.Clear();
@@ -317,6 +327,11 @@ public sealed partial class TelemetryStorageConsumer : ISampleConsumer, IAsyncDi
         if (frame.Inventory is { } inventory)
         {
             await WriteInventoryAsync(commands, ts, inventory, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (_sentOnce.ServicesToStore(frame) is { } kept)
+        {
+            await WriteServicesAsync(commands, UnixTime.ToUnixMs(kept.At), new ServiceSample(kept.At, kept.List, kept.Changes), cancellationToken).ConfigureAwait(false);
         }
 
         if (frame.Services is { } services)
@@ -515,6 +530,7 @@ public sealed partial class TelemetryStorageConsumer : ISampleConsumer, IAsyncDi
                 UnixTime.ToUnixMs(identity.StartedAt),
                 identity.Signer,
                 identity.Signature is { } signature ? (int)signature : null).ConfigureAwait(false);
+            _sentOnce.IdentityStored(identity.Key);
         }
 
         foreach (var e in processes.Events)
@@ -543,6 +559,7 @@ public sealed partial class TelemetryStorageConsumer : ISampleConsumer, IAsyncDi
         foreach (var selected in ProcessSelection.Select(processes, frame.Gpu, _topProcessCount(), includeMemory))
         {
             written.Add(selected.Metrics.Key);
+            await WriteKeptIdentityAsync(commands, selected.Metrics.Key, cancellationToken).ConfigureAwait(false);
             await WriteProcessRowAsync(commands, ts, selected, cancellationToken).ConfigureAwait(false);
         }
 
@@ -560,6 +577,7 @@ public sealed partial class TelemetryStorageConsumer : ISampleConsumer, IAsyncDi
                 var unchanged = _fullListRows.TryGetValue(key, out var last) && last.Row == selected && ts - last.Ts < FullListRefreshMs;
                 if (!written.Contains(key) && !unchanged)
                 {
+                    await WriteKeptIdentityAsync(commands, key, cancellationToken).ConfigureAwait(false);
                     await WriteProcessRowAsync(commands, ts, selected, cancellationToken).ConfigureAwait(false);
                 }
 
@@ -574,6 +592,28 @@ public sealed partial class TelemetryStorageConsumer : ISampleConsumer, IAsyncDi
                 _fullListRows.Remove(gone);
             }
         }
+    }
+
+    /// <summary>A process's identity, kept from a frame that was not stored, written before its first stored figures.</summary>
+    private async Task WriteKeptIdentityAsync(TelemetryCommands commands, ProcessKey key, CancellationToken cancellationToken)
+    {
+        if (_sentOnce.IdentityToStore(key) is not { } identity)
+        {
+            return;
+        }
+
+        await commands.ProcessIdentity.ExecuteAsync(
+            cancellationToken,
+            identity.Key.ToStorageId(),
+            identity.Key.Pid,
+            identity.ParentPid,
+            identity.Name,
+            identity.Path,
+            identity.CommandLine,
+            identity.User,
+            UnixTime.ToUnixMs(identity.StartedAt),
+            identity.Signer,
+            identity.Signature is { } signature ? (int)signature : null).ConfigureAwait(false);
     }
 
     private static async Task WriteProcessRowAsync(TelemetryCommands commands, long ts, SelectedProcess selected, CancellationToken cancellationToken)

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
-import { type ReactNode, useMemo, useState } from 'react';
+import { type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DataTable, type Column } from '@/components/data/DataTable';
 import { ProcessTable } from '@/components/ProcessTable';
 import { Badge } from '@/components/ui/badge';
@@ -54,9 +54,32 @@ export function useMoment(at: number) {
  * Everything recorded about one moment, incident or not: every chartable value and hardware sensor around it, and
  * the processes running then (the busiest with their figures, every other one known from its start and end time).
  */
-export function MomentPanel({ at, actions }: { at: number; actions?: ReactNode }) {
+/** A part of the page beside the moment's own sections (the chart on History), reached from the same bar. */
+export interface ExtraSection {
+  label: string;
+  /** Its shortcut: one letter. */
+  key: string;
+  onSelect: () => void;
+}
+
+/** True while the person is typing (a shortcut letter then goes into the field). */
+const typing = (target: EventTarget | null) => {
+  const el = target as HTMLElement | null;
+  return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+};
+
+/** Scrolls an element to the top of whatever scrolls it (the page, or a window's body), smoothly unless motion is reduced. */
+export function scrollToSection(el: HTMLElement | null) {
+  if (!el?.scrollIntoView) return;
+  const reduce = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+}
+
+export function MomentPanel({ at, actions, extraSections = [], panelRef }: { at: number; actions?: ReactNode; extraSections?: ExtraSection[]; panelRef?: RefObject<HTMLElement | null> }) {
   const { data, isLoading, isError } = useMoment(at);
   const [tab, setTab] = useState('processes');
+  const valuesRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const [processFilter, setProcessFilter] = useState('');
   const [serviceFilter, setServiceFilter] = useState('');
 
@@ -73,15 +96,65 @@ export function MomentPanel({ at, actions }: { at: number; actions?: ReactNode }
 
   const measured = data?.processes.filter((p) => p.measured !== false).length ?? 0;
   const valueCount = data?.values.length ?? 0;
+  const hasValues = !!data?.recorded && valueCount > 0;
+  const hasList = !!data?.recorded && data.processes.length > 0;
+
+  // The moment's sections, each a key away (V, P, S, and the page's own), shown on a bar that stays in sight.
+  const go = useCallback((section: 'values' | 'processes' | 'services') => {
+    if (section !== 'values') setTab(section);
+    scrollToSection(section === 'values' ? valuesRef.current : listRef.current);
+  }, []);
+  const sections = useMemo(
+    () => [
+      ...(hasValues ? [{ label: 'Values', key: 'v', onSelect: () => go('values') }] : []),
+      ...(hasList
+        ? [
+            { label: `Processes (${data!.processes.length})`, key: 'p', onSelect: () => go('processes') },
+            { label: `Services (${running} running)`, key: 's', onSelect: () => go('services') },
+          ]
+        : []),
+      ...extraSections,
+    ],
+    [hasValues, hasList, data, running, extraSections, go],
+  );
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat || typing(e.target)) return;
+      const section = sections.find((s) => s.key === e.key.toLowerCase());
+      if (!section) return;
+      e.preventDefault();
+      section.onSelect();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [sections]);
 
   return (
-    <section aria-label="This moment" className="flex flex-col gap-4">
+    <section ref={panelRef} aria-label="This moment" className="flex scroll-mt-4 flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-semibold">
           <time dateTime={new Date(at).toISOString()}>{formatDateTime(new Date(at).toISOString())}</time>
         </h2>
         {actions}
       </div>
+
+      {sections.length > 1 && (
+        <nav aria-label="Sections of this moment" className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center gap-1.5 rounded-md border border-border bg-surface px-1.5 py-1 text-sm shadow-sm">
+          <span className="px-1 text-xs text-muted">Go to</span>
+          {sections.map((s) => (
+            <button
+              key={s.key}
+              type="button"
+              onClick={s.onSelect}
+              aria-keyshortcuts={s.key.toUpperCase()}
+              className="inline-flex items-center gap-1.5 rounded px-2 py-0.5 hover:bg-surface-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+            >
+              {s.label}
+              <kbd className="rounded border border-border px-1 font-mono text-[10px] leading-4 text-muted">{s.key.toUpperCase()}</kbd>
+            </button>
+          ))}
+        </nav>
+      )}
 
       {isLoading && <p className="text-sm text-muted">Loading…</p>}
       {isError && <p className="text-sm text-danger">This moment could not be read.</p>}
@@ -92,8 +165,8 @@ export function MomentPanel({ at, actions }: { at: number; actions?: ReactNode }
         <p className="text-sm text-muted">Nothing is stored for this moment yet: recorded data reaches the database a few seconds later.</p>
       )}
 
-      {data?.recorded && valueCount > 0 && (
-        <div className="flex flex-col gap-2">
+      {hasValues && (
+        <div ref={valuesRef} className="flex scroll-mt-14 flex-col gap-2">
           <h3 className="text-sm font-medium">Values</h3>
           <DataTable
             viewKey="moment.values"
@@ -108,8 +181,8 @@ export function MomentPanel({ at, actions }: { at: number; actions?: ReactNode }
         </div>
       )}
 
-      {data?.recorded && data.processes.length > 0 && (
-        <div className="flex flex-col gap-2">
+      {hasList && (
+        <div ref={listRef} className="flex scroll-mt-14 flex-col gap-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <Segmented
               label="Processes or services"

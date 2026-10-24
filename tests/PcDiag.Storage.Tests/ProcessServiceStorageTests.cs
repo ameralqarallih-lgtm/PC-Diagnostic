@@ -103,6 +103,42 @@ public sealed class ProcessServiceStorageTests : IDisposable
         (await ScalarAsync(c, "SELECT kind FROM ServiceEvents WHERE name = 'Spooler';")).ShouldBe((long)ServiceEventKind.Stopped);
     }
 
+    [Fact]
+    public async Task A_recording_that_starts_after_watching_still_has_every_process_and_the_services()
+    {
+        var paths = new DataPaths(_dir.Path);
+        await new DatabaseInitializer(paths, _factory, new SchemaMigrator(NullLogger<SchemaMigrator>.Instance), _time, NullLogger<DatabaseInitializer>.Instance)
+            .InitializeAsync(CancellationToken.None);
+        await using var consumer = new TelemetryStorageConsumer(paths, _factory, new Monitor(), _time, NullLogger<TelemetryStorageConsumer>.Instance);
+        var busy = new ProcessKey(42, 1042);
+        var ts = _time.GetUtcNow();
+
+        // Watching (not stored): the process's identity and the service list are sent now, once, with a change after.
+        await consumer.ConsumeAsync(Frame(1, ts, [ProcessSelectionTests.Proc(42, cpu: 30)], [Identity(busy, path: @"C:\busy.exe")], []) with { Recorded = false }, CancellationToken.None);
+        await consumer.ConsumeAsync(new SampleFrame(2, ts.AddSeconds(2), Processes: new ProcessSample(ts.AddSeconds(2), [ProcessSelectionTests.Proc(42, cpu: 35)], [], []),
+            Services: new ServiceSample(ts.AddSeconds(2), null, [new ServiceChange(ts.AddSeconds(2), "W32Time", "Windows Time", ServiceEventKind.Started, "Stopped", "Running", 77)]), Recorded: false), CancellationToken.None);
+
+        // Recording starts: neither is sent again.
+        var recorded = ts.AddSeconds(10);
+        await consumer.ConsumeAsync(new SampleFrame(3, recorded, Processes: new ProcessSample(recorded, [ProcessSelectionTests.Proc(42, cpu: 40)], [], [])), CancellationToken.None);
+        await consumer.FlushAsync(CancellationToken.None);
+        await using (var write = new SqliteConnection($"Data Source={paths.TelemetryDatabase};Pooling=False"))
+        {
+            await write.OpenAsync();
+            await using var session = write.CreateCommand();
+            session.CommandText = $"INSERT INTO RecorderSessions (start_ts, start_reason, elevated) VALUES ({UnixTime.ToUnixMs(recorded)}, 1, 1);";
+            await session.ExecuteNonQueryAsync();
+        }
+
+        var moment = await new PcDiag.Storage.Sqlite.Reading.HistoryReader(_factory).MomentAsync(paths.TelemetryDatabase, UnixTime.ToUnixMs(recorded), (_, _) => true, CancellationToken.None);
+        var process = moment.Processes.ShouldHaveSingleItem();
+        (process.Name, process.CpuPercent).ShouldBe(("app.exe", 40));
+        var services = moment.Services.ShouldNotBeNull();
+        // The list as it was sent (Spooler running), with the change sent while watching (W32Time started) replayed.
+        services.Select(s => (s.Name, s.Status)).ShouldBe([("Spooler", "Running"), ("W32Time", "Running")], ignoreOrder: true);
+        services.Single(s => s.Name == "W32Time").Pid.ShouldBe(77);
+    }
+
     private static ProcessIdentityDetails Identity(ProcessKey key, string? path) =>
         new(key, 4, "app.exe", DateTimeOffset.UnixEpoch.AddYears(56), 1, path, null, null);
 

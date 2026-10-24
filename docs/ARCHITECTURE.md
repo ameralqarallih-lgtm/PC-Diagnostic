@@ -257,7 +257,7 @@ Legend for **Reliability**: **A** always available, **B** usually available, **C
 ### CPU
 | Metric | Source | Admin | Rel. |
 |---|---|---|---|
-| Total / per-core utilization (Task Manager-consistent) | PDH `\Processor Information(*)\% Processor Utility` | ✅ | A |
+| Total / per-core usage (as Task Manager shows it) | PDH `\Processor Information(*)\% Processor Time` (until 25 Oct 2026 `% Processor Utility`, which counts work against the base clock and ran well above Task Manager while the CPU boosted; Windows 11 Task Manager moved to `% Processor Time` in 2025) | ✅ | A |
 | User / kernel % | PDH `% User Time`, `% Privileged Time` | ✅ | A |
 | Effective frequency | PDH `Processor Frequency` × `% Processor Performance` / 100 (per core; important for hybrid P/E cores) | ✅ | A |
 | Max frequency | `CallNtPowerInformation(ProcessorInformation)` → `MaxMhz` | ✅ | A |

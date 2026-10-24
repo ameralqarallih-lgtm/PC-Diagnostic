@@ -1,7 +1,7 @@
 namespace PcDiag.Core.Telemetry;
 
 /// <summary>System-wide CPU metrics for one tick.</summary>
-/// <param name="TotalPercent">Utilization like Task Manager ("% Processor Utility", capped at 100).</param>
+/// <param name="TotalPercent">Usage like Task Manager ("% Processor Time": the share of time the processors were busy, 0-100).</param>
 /// <param name="FrequencyMhz">Effective frequency: nominal frequency × "% Processor Performance".</param>
 /// <param name="MaxFrequencyMhz">
 /// Rated (base) frequency as reported by Windows. Effective frequency exceeds it under turbo; the turbo ceiling
