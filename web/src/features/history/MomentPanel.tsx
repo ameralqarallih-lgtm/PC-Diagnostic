@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
-import { type ReactNode, type RefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, type RefObject, useCallback, useMemo, useRef, useState } from 'react';
 import { DataTable, type Column } from '@/components/data/DataTable';
 import { ProcessTable } from '@/components/ProcessTable';
 import { Badge } from '@/components/ui/badge';
@@ -54,19 +54,12 @@ export function useMoment(at: number) {
  * Everything recorded about one moment, incident or not: every chartable value and hardware sensor around it, and
  * the processes running then (the busiest with their figures, every other one known from its start and end time).
  */
-/** A part of the page beside the moment's own sections (the chart on History), reached from the same bar. */
+/** A part of the page beside the moment's own sections (the chart and the events on History), reached from the same bar. */
 export interface ExtraSection {
+  id: string;
   label: string;
-  /** Its shortcut: one letter. */
-  key: string;
   onSelect: () => void;
 }
-
-/** True while the person is typing (a shortcut letter then goes into the field). */
-const typing = (target: EventTarget | null) => {
-  const el = target as HTMLElement | null;
-  return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
-};
 
 /** Scrolls an element to the top of whatever scrolls it (the page, or a window's body), smoothly unless motion is reduced. */
 export function scrollToSection(el: HTMLElement | null) {
@@ -99,35 +92,24 @@ export function MomentPanel({ at, actions, extraSections = [], panelRef }: { at:
   const hasValues = !!data?.recorded && valueCount > 0;
   const hasList = !!data?.recorded && data.processes.length > 0;
 
-  // The moment's sections, each a key away (V, P, S, and the page's own), shown on a bar that stays in sight.
+  // The moment's sections (and the page's own), each a button on a bar that stays in sight.
   const go = useCallback((section: 'values' | 'processes' | 'services') => {
     if (section !== 'values') setTab(section);
     scrollToSection(section === 'values' ? valuesRef.current : listRef.current);
   }, []);
   const sections = useMemo(
     () => [
-      ...(hasValues ? [{ label: 'Values', key: 'v', onSelect: () => go('values') }] : []),
+      ...(hasValues ? [{ id: 'values', label: 'Values', onSelect: () => go('values') }] : []),
       ...(hasList
         ? [
-            { label: `Processes (${data!.processes.length})`, key: 'p', onSelect: () => go('processes') },
-            { label: `Services (${running} running)`, key: 's', onSelect: () => go('services') },
+            { id: 'processes', label: `Processes (${data!.processes.length})`, onSelect: () => go('processes') },
+            { id: 'services', label: `Services (${running} running)`, onSelect: () => go('services') },
           ]
         : []),
       ...extraSections,
     ],
     [hasValues, hasList, data, running, extraSections, go],
   );
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat || typing(e.target)) return;
-      const section = sections.find((s) => s.key === e.key.toLowerCase());
-      if (!section) return;
-      e.preventDefault();
-      section.onSelect();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [sections]);
 
   return (
     <section ref={panelRef} aria-label="This moment" className="flex scroll-mt-4 flex-col gap-4">
@@ -143,14 +125,12 @@ export function MomentPanel({ at, actions, extraSections = [], panelRef }: { at:
           <span className="px-1 text-xs text-muted">Go to</span>
           {sections.map((s) => (
             <button
-              key={s.key}
+              key={s.id}
               type="button"
               onClick={s.onSelect}
-              aria-keyshortcuts={s.key.toUpperCase()}
-              className="inline-flex items-center gap-1.5 rounded px-2 py-0.5 hover:bg-surface-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+              className="rounded px-2 py-0.5 hover:bg-surface-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
             >
               {s.label}
-              <kbd className="rounded border border-border px-1 font-mono text-[10px] leading-4 text-muted">{s.key.toUpperCase()}</kbd>
             </button>
           ))}
         </nav>

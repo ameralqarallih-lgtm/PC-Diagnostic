@@ -51,10 +51,17 @@ export function HistoryPage() {
   const to = search.end ?? Math.floor(now / 1000) * 1000;
   const from = to - RANGE_MS[search.range];
   const ids = useMemo(() => search.series.split(',').filter(Boolean), [search.series]);
-  // The chart and the moment picked on it, each a jump away from the other.
+  // The chart, the moment picked on it and the window's events, each a click away from the others.
   const chartRef = useRef<HTMLDivElement>(null);
   const momentRef = useRef<HTMLElement>(null);
-  const chartSection = useMemo<ExtraSection[]>(() => [{ label: 'Chart', key: 'c', onSelect: () => scrollToSection(chartRef.current) }], []);
+  const eventsRef = useRef<HTMLElement>(null);
+  const chartSection = useMemo<ExtraSection[]>(
+    () => [
+      { id: 'chart', label: 'Chart', onSelect: () => scrollToSection(chartRef.current) },
+      { id: 'events', label: 'Events', onSelect: () => scrollToSection(eventsRef.current) },
+    ],
+    [],
+  );
   const pickedAt = search.at;
   useEffect(() => {
     if (pickedAt !== undefined) scrollToSection(momentRef.current);
@@ -197,7 +204,7 @@ export function HistoryPage() {
         </Card>
       )}
 
-      <Card>
+      <Card ref={eventsRef} className="scroll-mt-4">
         <CardHeader className="flex-wrap">
           <CardTitle>Events in this window</CardTitle>
           <Segmented
