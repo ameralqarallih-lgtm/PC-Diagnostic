@@ -3,6 +3,20 @@
 All notable changes to PC Diagnostic & Incident Recorder. Each release's installer is on the
 [releases page](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases).
 
+## [1.0.5] - 2026-10-25
+
+### Fixed
+- **Drives behind Intel RST (VMD) show their real temperature.** Windows' reliability counters hold a placeholder
+  there (a fixed 60 °C on every drive, whatever its temperature); an NVMe drive's temperature now comes from the
+  drive's own health log.
+- **Drives behind Intel RST show their wear and power-on hours** (and spare capacity, media errors, unsafe
+  shutdowns, data read and written) when the RST driver does not pass Windows' health request on: LibreHardwareMonitor's
+  storage library, which reaches drives through Intel RST and VROC and makers' own NVMe drivers, fills what Windows
+  cannot. Seen on a Samsung 970 EVO.
+- **Intel integrated graphics:** their temperature and core clock show as "Not available on this GPU" (Intel's driver
+  gives monitoring programs neither; the CPU package temperature covers the chip they share), and the power share of
+  its limit as not applying (integrated graphics have no power limit of their own), instead of unavailable readings.
+
 ## [1.0.4] - 2026-10-25
 
 ### Fixed
@@ -47,6 +61,7 @@ The first public release: free and open source under the GPL-3.0, every feature 
 - On a GeForce RTX 50 series GPU the hotspot temperature shows as "Not available on this GPU" (NVIDIA removed the
   sensor) instead of counting as an unavailable reading. ([#1](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/1))
 
+[1.0.5]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.5
 [1.0.4]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.4
 [1.0.2]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.2
 [1.0.1]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/compare/v1.0.0...v1.0.2
