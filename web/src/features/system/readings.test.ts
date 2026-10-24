@@ -25,6 +25,7 @@ const overview: SystemOverview = {
     { series: 'gpu.gpu-10de-2684-467519da-1.power_w', availability: 'Unsupported', reason: 'Not exposed by this hardware, driver or Windows version.', since: NOW },
     { series: 'gpu.gpu-8086-7d67-88ef1043.fan_rpm', availability: 'Unsupported', reason: null, since: NOW },
     { series: 'gpu.gpu-8086-7d67-88ef1043.temp_c', availability: 'Unsupported', reason: null, since: NOW },
+    { series: 'gpu.gpu-8086-7d67-88ef1043.power_pct', availability: 'Unsupported', reason: null, since: NOW },
     { series: 'net.{7B1B3B8E-DD70-42B2-83A0-8BDCDDE78DE9}.wifi_quality', availability: 'NotPresent', reason: 'The device is not present.', since: NOW },
     { series: 'sensor.disk/0/wear', availability: 'Unsupported', reason: null, since: NOW },
     { series: 'sensor.disk/0/read_errors', availability: 'Unsupported', reason: null, since: NOW },
@@ -40,13 +41,15 @@ describe('unavailable readings', () => {
     const rows = classifyReadings(overview);
     const by = (series: string) => rows.find((r) => r.series === series)!;
 
-    expect(rows).toHaveLength(8);
+    expect(rows).toHaveLength(9);
     expect(by('gpu.gpu-10de-2684-467519da-1.power_w')).toMatchObject({ label: 'NVIDIA GeForce RTX 4090: power', category: 'removed' });
     expect(by('gpu.gpu-8086-7d67-88ef1043.fan_rpm')).toMatchObject({ label: 'Intel(R) Graphics: fan speed', category: 'notApplicable' });
+    expect(by('gpu.gpu-8086-7d67-88ef1043.power_pct')).toMatchObject({ label: 'Intel(R) Graphics: power (share of its limit)', category: 'notApplicable' });
+    // Intel's driver does not give out an integrated GPU's temperature: not a fault on this PC.
+    expect(by('gpu.gpu-8086-7d67-88ef1043.temp_c')).toMatchObject({ category: 'notOnThisGpu', why: expect.stringMatching(/^Not available on this GPU/) });
     expect(by('net.{7B1B3B8E-DD70-42B2-83A0-8BDCDDE78DE9}.wifi_quality')).toMatchObject({ label: 'Ethernet 3: Wi-Fi signal', category: 'notApplicable' });
 
     // What applies but is missing says what can be done.
-    expect(by('gpu.gpu-8086-7d67-88ef1043.temp_c')).toMatchObject({ category: 'missing', fix: expect.stringContaining('Intel') });
     expect(by('sensor.disk/0/wear')).toMatchObject({ label: 'Samsung SSD 9100 PRO: wear', category: 'missing', fix: expect.stringContaining('administrator') });
     // NVMe drives report errors their own way; a SATA drive's error counters do apply.
     expect(by('sensor.disk/0/read_errors')).toMatchObject({ category: 'notApplicable', why: expect.stringContaining('media errors') });

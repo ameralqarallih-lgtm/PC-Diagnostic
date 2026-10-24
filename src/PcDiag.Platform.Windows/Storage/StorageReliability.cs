@@ -6,7 +6,8 @@ using System.Security.Principal;
 namespace PcDiag.Platform.Windows.Storage;
 
 /// <summary>Windows storage reliability counters for one disk (MSFT_StorageReliabilityCounter). Null fields are not reported.</summary>
-public sealed record StorageReliabilityInfo(int DiskNumber, double? TemperatureC, double? TemperatureMaxC, double? WearPercent, long? ReadErrorsTotal, long? WriteErrorsTotal, long? PowerOnHours);
+/// <param name="IsNvme">The disk is on the NVMe bus (MSFT_PhysicalDisk.BusType 17).</param>
+public sealed record StorageReliabilityInfo(int DiskNumber, double? TemperatureC, double? TemperatureMaxC, double? WearPercent, long? ReadErrorsTotal, long? WriteErrorsTotal, long? PowerOnHours, bool IsNvme = false);
 
 /// <summary>Result of a reliability query.</summary>
 /// <param name="AccessDenied">The query needs administrator rights.</param>
@@ -18,6 +19,8 @@ public sealed record StorageReliabilityResult(IReadOnlyList<StorageReliabilityIn
 /// </summary>
 public static class StorageReliability
 {
+    private const int BusTypeNvme = 17;
+
     /// <summary>Reads counters for all physical disks.</summary>
     public static StorageReliabilityResult Read()
     {
@@ -38,6 +41,7 @@ public static class StorageReliability
                     }
 
                     physicalDisks++;
+                    var nvme = disk["BusType"] is { } bus && Convert.ToInt32(bus, CultureInfo.InvariantCulture) == BusTypeNvme;
 
                     foreach (var counter in disk.GetRelated("MSFT_StorageReliabilityCounter").Cast<ManagementObject>())
                     {
@@ -50,7 +54,8 @@ public static class StorageReliability
                                 Number(counter, "Wear"),
                                 Integer(counter, "ReadErrorsTotal"),
                                 Integer(counter, "WriteErrorsTotal"),
-                                Integer(counter, "PowerOnHours")));
+                                Integer(counter, "PowerOnHours"),
+                                nvme));
                         }
                     }
                 }

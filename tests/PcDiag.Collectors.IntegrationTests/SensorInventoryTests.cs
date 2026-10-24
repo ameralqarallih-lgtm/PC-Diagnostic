@@ -73,6 +73,52 @@ public class LhmMappingTests
     }
 
     [Fact]
+    public void A_drive_behind_intel_rst_gets_its_health_from_lhm_under_the_storage_keys()
+    {
+        using var provider = new LhmSensorProvider(new ElevationInfo(true), TimeProvider.System, NullLogger<LhmSensorProvider>.Instance);
+
+        // An NVMe health log as CrystalDiskInfo numbers its fields (data units are 512,000 bytes).
+        var log = new Dictionary<byte, double> { [0x03] = 100, [0x05] = 2, [0x07] = 1000, [0x0C] = 21000, [0x0D] = 140, [0x0E] = 0 };
+        var readings = provider.DriveReadings(1, 41, 98, 21000, log).ToDictionary(r => r.Sensor.LogicalKey, r => r.Value.Value);
+
+        readings[SensorKeys.DiskTemperature(1)].ShouldBe(41);
+        readings["disk/1/wear"].ShouldBe(2); // percentage used, from the log
+        readings["disk/1/power_on_hours"].ShouldBe(21000);
+        readings["disk/1/data_written"].ShouldBe(512_000_000);
+        readings["disk/1/media_errors"].ShouldBe(0);
+        readings.ShouldNotContainKey("disk/1/data_read"); // not in this log: left to the storage provider's reason
+
+        // A SATA drive: wear from the remaining life.
+        var sata = provider.DriveReadings(2, null, 93, 800, null).ToDictionary(r => r.Sensor.LogicalKey, r => r.Value.Value);
+        sata["disk/2/wear"].ShouldBe(7);
+        sata["disk/2/power_on_hours"].ShouldBe(800);
+        sata.ShouldNotContainKey(SensorKeys.DiskTemperature(2));
+        provider.DriveReadings(-1, 40, 100, 1, null).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void An_nvme_drive_takes_its_temperature_from_its_own_log_not_the_counters()
+    {
+        var provider = new StorageReliabilitySensorProvider(new ElevationInfo(true), TimeProvider.System);
+        var log = new NvmeHealthInfo(0, 49, 100, 10, 0, 1e12, 2e12, 58, 2352, 22, 0, 0, 0, 0);
+        // Behind Intel RST (VMD) the counters hold placeholders: 60 °C on every drive, whatever its temperature.
+        var placeholder = new StorageReliabilityInfo(0, 60, null, null, null, null, null, IsNvme: true);
+
+        var readings = provider.Readings(0, placeholder, log).ToDictionary(r => r.Sensor.LogicalKey, r => r.Value);
+        readings[SensorKeys.DiskTemperature(0)].Value.ShouldBe(49);
+        readings["disk/0/power_on_hours"].Value.ShouldBe(2352);
+
+        // When the log does not reach the drive either, the temperature stays a gap for LibreHardwareMonitor to fill.
+        var unreached = provider.Readings(1, placeholder with { DiskNumber = 1 }, null).ToDictionary(r => r.Sensor.LogicalKey, r => r.Value);
+        unreached[SensorKeys.DiskTemperature(1)].HasValue.ShouldBeFalse();
+
+        // A SATA drive's counters are its source.
+        var sata = provider.Readings(2, new StorageReliabilityInfo(2, 35, 51, 3, 0, 0, 900), null).ToDictionary(r => r.Sensor.LogicalKey, r => r.Value);
+        sata[SensorKeys.DiskTemperature(2)].Value.ShouldBe(35);
+        sata["disk/2/wear"].Value.ShouldBe(3);
+    }
+
+    [Fact]
     public async Task Real_provider_never_reports_blocked_cpu_readings_as_values()
     {
         using var provider = new LhmSensorProvider(new ElevationInfo(false), TimeProvider.System, NullLogger<LhmSensorProvider>.Instance);

@@ -10,6 +10,9 @@ namespace PcDiag.Collectors.Sensors;
 /// leaves the counters empty for NVMe drives on its standard driver, while the drive answers the health log page
 /// (temperature, life used, spare, media errors, unsafe shutdowns, data written). Needs administrator rights; read
 /// once a minute. Higher priority than LibreHardwareMonitor for disk temperature because it is the Windows-native source.
+/// For an NVMe drive the drive's own log comes first: behind Intel RST (VMD) the counters hold placeholders (a fixed
+/// 60 °C and 0% wear on every drive). What neither reaches (RST passes no health request on), LibreHardwareMonitor's
+/// own NVMe paths fill under the same keys.
 /// </summary>
 public sealed class StorageReliabilitySensorProvider(ElevationInfo elevation, TimeProvider timeProvider, Func<int, NvmeHealthInfo?>? nvmeHealth = null) : IHardwareSensorProvider
 {
@@ -48,27 +51,37 @@ public sealed class StorageReliabilitySensorProvider(ElevationInfo elevation, Ti
         {
             var disk = counters.GetValueOrDefault(number);
             // The drive's own log fills what the counters leave empty (and adds what only NVMe reports).
-            var nvme = disk is { TemperatureC: not null, WearPercent: not null, PowerOnHours: not null } && nvmeHealth is null ? null : ReadNvme(number);
-            readings.Add(Reading(number, "temperature", SensorKind.Temperature, "Temperature", "°C", disk?.TemperatureC ?? nvme?.TemperatureC));
-            readings.Add(Reading(number, "temperature_max", SensorKind.Temperature, "Temperature (max)", "°C", disk?.TemperatureMaxC));
-            readings.Add(Reading(number, "wear", SensorKind.Other, "Wear", "%", disk?.WearPercent ?? nvme?.PercentageUsed));
-            readings.Add(Reading(number, "read_errors", SensorKind.Other, "Read errors (total)", "count", disk?.ReadErrorsTotal));
-            readings.Add(Reading(number, "write_errors", SensorKind.Other, "Write errors (total)", "count", disk?.WriteErrorsTotal));
-            readings.Add(Reading(number, "power_on_hours", SensorKind.Other, "Power-on hours", "h", disk?.PowerOnHours ?? nvme?.PowerOnHours));
-            if (nvme is not null)
-            {
-                readings.Add(Reading(number, "available_spare", SensorKind.Other, "Available spare", "%", nvme.AvailableSparePercent));
-                readings.Add(Reading(number, "media_errors", SensorKind.Other, "Media and data integrity errors", "count", nvme.MediaErrors));
-                readings.Add(Reading(number, "unsafe_shutdowns", SensorKind.Other, "Unsafe shutdowns", "count", nvme.UnsafeShutdowns));
-                readings.Add(Reading(number, "critical_warning", SensorKind.Other, "Critical warning flags", "flags", nvme.CriticalWarning));
-                readings.Add(Reading(number, "data_written", SensorKind.Other, "Data written", "B", nvme.DataWrittenBytes));
-                readings.Add(Reading(number, "data_read", SensorKind.Other, "Data read", "B", nvme.DataReadBytes));
-                readings.Add(Reading(number, "power_cycles", SensorKind.Other, "Power cycles", "count", nvme.PowerCycles));
-                readings.Add(Reading(number, "error_log_entries", SensorKind.Other, "Error log entries", "count", nvme.ErrorLogEntries));
-            }
+            var nvme = disk is { IsNvme: false, TemperatureC: not null, WearPercent: not null, PowerOnHours: not null } && nvmeHealth is null ? null : ReadNvme(number);
+            readings.AddRange(Readings(number, disk, nvme));
         }
 
         return ValueTask.FromResult(new HardwareSnapshot(timeProvider.GetUtcNow(), ProviderId, readings));
+    }
+
+    /// <summary>
+    /// One disk's readings from its counters and, for NVMe, its health log: an NVMe drive's temperature only from the
+    /// log (behind Intel RST the counter is a fixed placeholder), its wear and hours from the log first.
+    /// </summary>
+    internal IEnumerable<SensorReading> Readings(int number, StorageReliabilityInfo? disk, NvmeHealthInfo? nvme)
+    {
+        var isNvme = disk?.IsNvme == true || nvme is not null;
+        yield return Reading(number, "temperature", SensorKind.Temperature, "Temperature", "°C", isNvme ? nvme?.TemperatureC : disk?.TemperatureC);
+        yield return Reading(number, "temperature_max", SensorKind.Temperature, "Temperature (max)", "°C", isNvme ? null : disk?.TemperatureMaxC);
+        yield return Reading(number, "wear", SensorKind.Other, "Wear", "%", nvme?.PercentageUsed ?? disk?.WearPercent);
+        yield return Reading(number, "read_errors", SensorKind.Other, "Read errors (total)", "count", disk?.ReadErrorsTotal);
+        yield return Reading(number, "write_errors", SensorKind.Other, "Write errors (total)", "count", disk?.WriteErrorsTotal);
+        yield return Reading(number, "power_on_hours", SensorKind.Other, "Power-on hours", "h", nvme?.PowerOnHours ?? disk?.PowerOnHours);
+        if (nvme is not null)
+        {
+            yield return Reading(number, "available_spare", SensorKind.Other, "Available spare", "%", nvme.AvailableSparePercent);
+            yield return Reading(number, "media_errors", SensorKind.Other, "Media and data integrity errors", "count", nvme.MediaErrors);
+            yield return Reading(number, "unsafe_shutdowns", SensorKind.Other, "Unsafe shutdowns", "count", nvme.UnsafeShutdowns);
+            yield return Reading(number, "critical_warning", SensorKind.Other, "Critical warning flags", "flags", nvme.CriticalWarning);
+            yield return Reading(number, "data_written", SensorKind.Other, "Data written", "B", nvme.DataWrittenBytes);
+            yield return Reading(number, "data_read", SensorKind.Other, "Data read", "B", nvme.DataReadBytes);
+            yield return Reading(number, "power_cycles", SensorKind.Other, "Power cycles", "count", nvme.PowerCycles);
+            yield return Reading(number, "error_log_entries", SensorKind.Other, "Error log entries", "count", nvme.ErrorLogEntries);
+        }
     }
 
     private NvmeHealthInfo? ReadNvme(int number)

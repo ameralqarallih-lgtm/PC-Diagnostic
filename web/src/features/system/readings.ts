@@ -50,8 +50,11 @@ const AREA_TEXT: Record<string, string> = { cpu: 'CPU', memory: 'Memory', gpu: '
 /** Windows reliability counters that NVMe drives replace with their own health log. */
 const NOT_ON_NVME = new Set(['read_errors', 'write_errors', 'temperature_max']);
 
-/** Metrics integrated graphics do not have (no fan, no hotspot sensor, no memory of their own). */
-const NOT_ON_INTEGRATED = new Set(['fan_rpm', 'hotspot_c', 'mem_mhz', 'power_limit_w', 'throttle_flags']);
+/** Metrics integrated graphics do not have (no fan, no hotspot sensor, no memory or power limit of their own). */
+const NOT_ON_INTEGRATED = new Set(['fan_rpm', 'hotspot_c', 'mem_mhz', 'power_limit_w', 'power_pct', 'throttle_flags']);
+
+/** Metrics Intel's driver gives no monitoring program for its integrated graphics. */
+const NOT_ON_INTEL_INTEGRATED = new Set(['temp_c', 'core_mhz']);
 
 /**
  * NVIDIA's GeForce RTX 50 series and other Blackwell GPUs: their driver no longer reports a hotspot temperature, so no
@@ -146,6 +149,10 @@ export function classifyReadings(overview: SystemOverview): ReadingRow[] {
       } else if (head === 'gpu' && isIntegrated(device) && NOT_ON_INTEGRATED.has(metric)) {
         category = 'notApplicable';
         why = 'Integrated graphics have no fan, hotspot sensor, memory clock or power limit of their own.';
+        fix = 'Nothing to do.';
+      } else if (head === 'gpu' && isIntegrated(device) && /intel/i.test(device?.vendor ?? '') && NOT_ON_INTEL_INTEGRATED.has(metric)) {
+        category = 'notOnThisGpu';
+        why = 'Not available on this GPU: Intel’s driver gives monitoring programs no temperature or live clock for its integrated graphics. They share the CPU’s chip, so the CPU package temperature covers their heat; their power and load are still recorded.';
         fix = 'Nothing to do.';
       } else if (head === 'sensor' && rest[0] === 'disk' && /nvme/i.test(String(device?.details?.busType ?? device?.vendor ?? '')) && NOT_ON_NVME.has(metric)) {
         category = 'notApplicable';

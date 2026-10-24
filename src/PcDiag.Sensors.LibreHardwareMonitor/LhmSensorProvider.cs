@@ -2,6 +2,7 @@ using PcDiag.Core.Diagnostics;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using LibreHardwareMonitor.Hardware;
+using LibreHardwareMonitor.Hardware.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Win32;
 using PcDiag.Core.Abstractions;
@@ -39,6 +40,7 @@ public sealed partial class LhmSensorProvider : IHardwareSensorProvider, IDispos
     private readonly ILogger<LhmSensorProvider> _logger;
     private readonly Dictionary<Identifier, long> _lastUpdate = [];
     private readonly HashSet<Identifier> _reportedSlow = [];
+    private readonly Dictionary<Identifier, IReadOnlyList<SensorReading>> _drives = [];
     private readonly CancellationTokenSource _stop = new();
     private Computer? _computer;
     private bool _pawnIoInstalled;
@@ -171,9 +173,17 @@ public sealed partial class LhmSensorProvider : IHardwareSensorProvider, IDispos
         {
             // Without elevation and PawnIO, CPU and Super I/O readings are zeros or stale; don't pay for reading them.
             var blocked = PrerequisiteReason(hardware.HardwareType);
-            if (blocked is null)
+            var updated = blocked is null && UpdateIfDue(hardware, now);
+
+            // A drive's health under the storage provider's keys, built again only when the drive was read.
+            if (hardware is StorageDevice drive)
             {
-                UpdateIfDue(hardware, now);
+                if (updated || !_drives.TryGetValue(hardware.Identifier, out var kept))
+                {
+                    _drives[hardware.Identifier] = kept = DriveReadings(drive);
+                }
+
+                readings.AddRange(kept);
             }
 
             foreach (var item in Flatten([hardware]))
@@ -343,7 +353,8 @@ public sealed partial class LhmSensorProvider : IHardwareSensorProvider, IDispos
     private SensorReading Missing(string key, SensorKind kind, string name, string unit) =>
         new(new SensorDescriptor(ProviderId, "CPU", kind, name, unit, key), Reading<double>.Unavailable(PrerequisiteReason(HardwareType.Cpu) ?? Availability.Unsupported));
 
-    private void UpdateIfDue(IHardware hardware, long now)
+    /// <summary>Updates the hardware when its interval has passed; whether it did.</summary>
+    private bool UpdateIfDue(IHardware hardware, long now)
     {
         var interval = hardware.HardwareType switch
         {
@@ -353,7 +364,7 @@ public sealed partial class LhmSensorProvider : IHardwareSensorProvider, IDispos
         };
         if (_lastUpdate.TryGetValue(hardware.Identifier, out var last) && _timeProvider.GetElapsedTime(last, now) < interval)
         {
-            return;
+            return false;
         }
 
         var started = Stopwatch.GetTimestamp();
@@ -377,6 +388,79 @@ public sealed partial class LhmSensorProvider : IHardwareSensorProvider, IDispos
         }
 
         _lastUpdate[hardware.Identifier] = now;
+        return true;
+    }
+
+    /// <summary>
+    /// A drive's health as LibreHardwareMonitor's storage library reads it, under the storage provider's keys
+    /// ("disk/{number}/wear"). That library has its own NVMe paths (Intel RST and VROC, Samsung's and other makers'
+    /// drivers) and reaches drives whose driver passes Windows' health request on to nobody: the storage provider's
+    /// own values win the merge, these fill what it cannot reach (a Samsung 970 EVO behind Intel RST VMD on the dev PC).
+    /// </summary>
+    private List<SensorReading> DriveReadings(StorageDevice drive)
+    {
+        try
+        {
+            var storage = drive.Storage;
+            var smart = storage.Smart;
+            var log = storage.IsNVMe
+                ? (smart.SmartAttributes ?? []).Where(a => a.Info is not null).GroupBy(a => a.Info.ID).ToDictionary(g => g.Key, g => (double)g.First().Attribute.RawValueULong)
+                : null;
+            return DriveReadings(storage.DriveNumber, smart.Temperature, smart.Life, smart.MeasuredPowerOnHours, log);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            LogUpdateFailed(_logger, ex, drive.Name);
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// The readings for drive <paramref name="number"/>: temperature, and from an NVMe drive's health log (attribute
+    /// IDs as CrystalDiskInfo numbers its fields: 03 available spare, 05 percentage used, 06/07 data units read and
+    /// written, 0B power cycles, 0C power-on hours, 0D unsafe shutdowns, 0E media errors, 0F error log entries) the
+    /// rest; for other drives wear from the remaining life and the measured power-on hours.
+    /// </summary>
+    internal List<SensorReading> DriveReadings(int number, double? temperatureC, double? lifePercent, double powerOnHours, IReadOnlyDictionary<byte, double>? nvmeLog)
+    {
+        var readings = new List<SensorReading>();
+        if (number < 0)
+        {
+            return readings;
+        }
+
+        void Add(string metric, SensorKind kind, string name, string unit, double? value)
+        {
+            if (value is { } v && double.IsFinite(v))
+            {
+                var key = metric == "temperature" ? SensorKeys.DiskTemperature(number) : $"disk/{number.ToString(System.Globalization.CultureInfo.InvariantCulture)}/{metric}";
+                readings.Add(new SensorReading(new SensorDescriptor(ProviderId, $"Disk {number.ToString(System.Globalization.CultureInfo.InvariantCulture)}", kind, name, unit, key), Reading<double>.Of(v)));
+            }
+        }
+
+        double? Log(byte id) => nvmeLog is not null && nvmeLog.TryGetValue(id, out var v) ? v : null;
+
+        Add("temperature", SensorKind.Temperature, "Temperature", "°C", temperatureC is > 0 and < 150 ? temperatureC : null);
+        if (nvmeLog is not null)
+        {
+            Add("wear", SensorKind.Other, "Wear", "%", Log(0x05));
+            Add("power_on_hours", SensorKind.Other, "Power-on hours", "h", Log(0x0C));
+            Add("available_spare", SensorKind.Other, "Available spare", "%", Log(0x03));
+            Add("media_errors", SensorKind.Other, "Media and data integrity errors", "count", Log(0x0E));
+            Add("unsafe_shutdowns", SensorKind.Other, "Unsafe shutdowns", "count", Log(0x0D));
+            Add("critical_warning", SensorKind.Other, "Critical warning flags", "flags", Log(0x01));
+            Add("data_written", SensorKind.Other, "Data written", "B", Log(0x07) * 512_000);
+            Add("data_read", SensorKind.Other, "Data read", "B", Log(0x06) * 512_000);
+            Add("power_cycles", SensorKind.Other, "Power cycles", "count", Log(0x0B));
+            Add("error_log_entries", SensorKind.Other, "Error log entries", "count", Log(0x0F));
+        }
+        else
+        {
+            Add("wear", SensorKind.Other, "Wear", "%", lifePercent is >= 0 and <= 100 ? 100 - lifePercent : null);
+            Add("power_on_hours", SensorKind.Other, "Power-on hours", "h", powerOnHours > 0 ? powerOnHours : null);
+        }
+
+        return readings;
     }
 
     private static IEnumerable<IHardware> Flatten(IEnumerable<IHardware> hardware) =>
