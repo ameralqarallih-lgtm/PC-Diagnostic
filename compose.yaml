@@ -1,0 +1,46 @@
+# Local Docker deployment of the PC Diagnostic web host (UI + API).
+#
+#   docker compose up -d --build            start on http://localhost:5180
+#   docker compose logs web                 shows the one-time sign-in link
+#   docker compose restart web              prints a fresh link (links are single use)
+#   docker compose --profile test build tests   run the cross-platform test suite
+#
+# The recorder Agent runs natively on Windows (it cannot observe the host from a container), so the
+# containerized dashboard shows "Recorder not connected" until an Agent connection is added.
+
+name: pcdiagnostic
+
+services:
+  web:
+    build:
+      context: .
+      target: runtime
+    image: pcdiagnostic/web:dev
+    # Published on the host's loopback only; never reachable from the network.
+    ports:
+      - "127.0.0.1:5180:8080"
+    environment:
+      Web__PublicBaseUrl: "http://localhost:5180"
+      Web__LaunchTokenLifetimeSeconds: "900"
+    volumes:
+      - pcdiag-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  tests:
+    profiles: ["test"]
+    build:
+      context: .
+      target: test
+    image: pcdiagnostic/tests:dev
+
+volumes:
+  # Linux-native named volume: SQLite WAL needs real file locking and shared memory,
+  # which Windows bind mounts into Linux containers do not provide reliably.
+  pcdiag-data:

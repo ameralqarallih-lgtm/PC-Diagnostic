@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+  <!-- Recorder agent with a tray icon and capture hotkey. Windows-only; elevated when started via the scheduled task. -->
+  <PropertyGroup>
+    <TargetFramework>$(PcDiagWindowsTfm)</TargetFramework>
+    <!-- A tray application: no console window. When started from a terminal it attaches to it for log output. -->
+    <OutputType>WinExe</OutputType>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>PcDiag.Agent</AssemblyName>
+    <!-- Drawn by installer\Make-Icon.ps1 (the dashboard's favicon). -->
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <!-- A background recorder: no background GC thread (nothing here is latency-sensitive), and compact the heap
+         rather than grow it when it fragments (Phase 14; ARCHITECTURE §10, Enhanced mode, overhead budget). -->
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+  </PropertyGroup>
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="PcDiag.Agent.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PcDiag.Collectors\PcDiag.Collectors.csproj" />
+    <ProjectReference Include="..\PcDiag.Hosting\PcDiag.Hosting.csproj" />
+    <ProjectReference Include="..\PcDiag.Sensors.LibreHardwareMonitor\PcDiag.Sensors.LibreHardwareMonitor.csproj" />
+    <ProjectReference Include="..\PcDiag.Screens.Sdk\PcDiag.Screens.Sdk.csproj" />
+    <ProjectReference Include="..\PcDiag.Drivers.Io\PcDiag.Drivers.Io.csproj" />
+    <ProjectReference Include="..\PcDiag.Storage.Files\PcDiag.Storage.Files.csproj" />
+  </ItemGroup>
+</Project>

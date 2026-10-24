@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- No plain http anywhere. The PC's self-signed certificate is trusted by pinning its fingerprint in code
+     (Pinned.java), never by trusting user-installed certificates. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

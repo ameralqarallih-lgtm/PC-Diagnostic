@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Where files are kept: this PC, folders and S3-compatible services, as storage locations that each keep some kinds
+       of file (pictures, layout backups, driver packages, exports). Used by the Web host; the recorder reads local files. -->
+  <PropertyGroup>
+    <TargetFramework>$(PcDiagTfm)</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PcDiag.Core\PcDiag.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="PcDiag.Storage.Tests" />
+    <InternalsVisibleTo Include="PcDiag.Web.Tests" />
+  </ItemGroup>
+</Project>

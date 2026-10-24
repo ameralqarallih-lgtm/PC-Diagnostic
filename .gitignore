@@ -1,0 +1,31 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+TestResults/
+*.binlog
+
+# Web UI
+web/node_modules/
+web/dist/
+web/coverage/
+web/playwright-report/
+web/test-results/
+
+# Local data (never commit diagnostic data)
+*.db
+*.db-wal
+*.db-shm
+
+# OS / editors
+Thumbs.db
+.DS_Store
+.idea/
+
+# Local preview builds (dotnet publish output)
+artifacts/
+
+# The character generator's models (downloaded by tools/character-gen/setup.py)
+tools/character-gen/kit/

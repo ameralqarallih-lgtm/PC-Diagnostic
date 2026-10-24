@@ -1,0 +1,32 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+
+[*.{json,jsonc,yml,yaml,ts,tsx,js,css,html,md,props,csproj,targets}]
+indent_size = 2
+
+[*.cs]
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_using_directive_placement = outside_namespace
+dotnet_sort_system_directives_first = true
+csharp_style_var_for_built_in_types = true
+csharp_style_var_when_type_is_apparent = true
+csharp_prefer_braces = when_multiline
+
+# No host has a SynchronizationContext (Generic Host, ASP.NET Core; the UI is a browser),
+# so ConfigureAwait(false) is not required. Existing ConfigureAwait calls are harmless.
+dotnet_diagnostic.CA2007.severity = none
+# Structured logging: allow LoggerMessage/extension usage without forcing source-gen everywhere.
+dotnet_diagnostic.CA1848.severity = suggestion
+dotnet_diagnostic.CA1873.severity = suggestion
+# Not localizing a diagnostic tool's log/exception text.
+dotnet_diagnostic.CA1303.severity = none
+
+# Static factories on generic value types (Reading<T>.Of) are intentional API.
+dotnet_diagnostic.CA1000.severity = none

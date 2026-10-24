@@ -1,0 +1,53 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PcDiag.Agent/PcDiag.Agent.csproj" />
+    <Project Path="src/PcDiag.Collectors/PcDiag.Collectors.csproj">
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="src/PcDiag.Core/PcDiag.Core.csproj" />
+    <Project Path="src/PcDiag.Engine/PcDiag.Engine.csproj">
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="src/PcDiag.Hosting/PcDiag.Hosting.csproj" />
+    <Project Path="src/PcDiag.Screens.Sdk/PcDiag.Screens.Sdk.csproj" />
+    <Project Path="src/PcDiag.Drivers.Io/PcDiag.Drivers.Io.csproj" />
+    <Project Path="src/PcDiag.Platform.Windows/PcDiag.Platform.Windows.csproj">
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="src/PcDiag.Sensors.LibreHardwareMonitor/PcDiag.Sensors.LibreHardwareMonitor.csproj">
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="src/PcDiag.Storage.Sqlite/PcDiag.Storage.Sqlite.csproj" />
+    <Project Path="src/PcDiag.Storage.Files/PcDiag.Storage.Files.csproj" />
+    <Project Path="src/PcDiag.Web/PcDiag.Web.csproj">
+      <Platform Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/PcDiag.ReportService/PcDiag.ReportService.csproj" />
+    <Project Path="tools/PcDiag.StressKit/PcDiag.StressKit.csproj">
+      <Platform Project="x64" />
+    </Project>
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PcDiag.Agent.Tests/PcDiag.Agent.Tests.csproj">
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="tests/PcDiag.Collectors.IntegrationTests/PcDiag.Collectors.IntegrationTests.csproj">
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="tests/PcDiag.Core.Tests/PcDiag.Core.Tests.csproj">
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="tests/PcDiag.Engine.Tests/PcDiag.Engine.Tests.csproj">
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="tests/PcDiag.Storage.Tests/PcDiag.Storage.Tests.csproj">
+      <Platform Project="x64" />
+    </Project>
+    <Project Path="tests/PcDiag.Web.Tests/PcDiag.Web.Tests.csproj">
+      <Platform Project="x64" />
+    </Project>
+      <Project Path="tests/PcDiag.Screens.Tests/PcDiag.Screens.Tests.csproj" />
+  </Folder>
+</Solution>

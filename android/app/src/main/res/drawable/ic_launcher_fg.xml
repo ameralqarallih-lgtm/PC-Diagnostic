@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- a monitor with a heartbeat line: the PC, watched -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#E6EDF3"
+        android:strokeWidth="4"
+        android:pathData="M32,36 L76,36 Q80,36 80,40 L80,64 Q80,68 76,68 L32,68 Q28,68 28,64 L28,40 Q28,36 32,36 Z" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#E6EDF3"
+        android:strokeWidth="4"
+        android:pathData="M46,76 L62,76 M54,68 L54,76" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#38BDF8"
+        android:strokeWidth="4"
+        android:strokeLineJoin="round"
+        android:pathData="M34,54 L44,54 L48,46 L54,60 L58,50 L62,54 L74,54" />
+</vector>

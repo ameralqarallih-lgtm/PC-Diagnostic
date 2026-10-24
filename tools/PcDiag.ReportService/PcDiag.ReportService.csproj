@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    The vendor's problem-report service (Phase 21). Not shipped to users: the makers host it (a container) and put its
+    address in the release build (Reporting:Endpoint). It stores every report and, when configured, files each new
+    problem as an Azure DevOps bug and adds a comment when the same problem is reported again.
+  -->
+  <PropertyGroup>
+    <TargetFramework>$(PcDiagTfm)</TargetFramework>
+    <AssemblyName>PcDiag.ReportService</AssemblyName>
+    <RootNamespace>PcDiag.ReportService</RootNamespace>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PcDiag.Core\PcDiag.Core.csproj" />
+    <InternalsVisibleTo Include="PcDiag.Web.Tests" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,207 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Characters</title>
+<style>
+  body { margin: 0; background: #0f1420; font: 13px 'Segoe UI', sans-serif; color: #cbd5e1; }
+  .row { display: flex; flex-wrap: wrap; gap: 14px; padding: 14px; }
+  .cell { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .stage { width: 220px; height: 220px; border-radius: 14px; background: radial-gradient(120% 90% at 50% 20%, #24304a 0%, #121826 70%); }
+  svg { display: block; overflow: visible; }
+</style>
+</head>
+<body>
+<!--
+  The shipped characters: open this page to see every clip play; scripts/bake-characters.mjs calls bake() here to
+  render each clip's frames, which it packs into the app's ".char" files.
+-->
+<div id="root"></div>
+<script src="engine.js"></script>
+<script src="mochi.js"></script>
+<script src="biscuit.js"></script>
+<script src="effects.js"></script>
+<script>
+  /** The clips a character may have, in the order they are packed. */
+  const ACTIONS = ['idle', 'walk', 'run', 'jump', 'play', 'dance', 'sit', 'sleep'];
+  /** Frames a second of each clip: slow ones need fewer (the rest play at 24). */
+  const FPS = { idle: 15, sit: 12, sleep: 10 };
+  /** The area drawn, in the characters' units (room for jumps, tails and shadows). */
+  const AREA = { x: -40, y: -30, w: 320, h: 290 };
+
+  async function rasterize(markup, k) {
+    const w = Math.ceil(AREA.w * k), h = Math.ceil(AREA.h * k);
+    const doc = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="${AREA.x} ${AREA.y} ${AREA.w} ${AREA.h}">${markup}</svg>`;
+    const img = new Image();
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(doc);
+    await img.decode();
+    const canvas = new OffscreenCanvas(w, h);
+    canvas.getContext('2d').drawImage(img, 0, 0);
+    return canvas;
+  }
+
+  /** The box of a canvas's pixels that are not see-through. */
+  function bounds(canvas) {
+    const { data, width, height } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+    let left = width, top = height, right = -1, bottom = -1;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (data[(y * width + x) * 4 + 3] > 2) {
+          if (x < left) left = x;
+          if (x > right) right = x;
+          if (y < top) top = y;
+          if (y > bottom) bottom = y;
+        }
+      }
+    }
+    return right < 0 ? null : { left, top, right: right + 1, bottom: bottom + 1 };
+  }
+
+  const base64 = (bytes) => {
+    let s = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return btoa(s);
+  };
+
+  /**
+   * Every clip of a character rendered, `tall` pixels from its feet to the top of its head, cropped to what any frame
+   * draws: the manifest of its ".char" file and each frame as a base64 PNG of 256 colours (one palette for them all;
+   * png8.js is the editor's png8.ts, served by the bake script).
+   */
+  window.bake = async (id, { tall = 200 } = {}) => {
+    const png8 = await import('./png8.js');
+    const ch = CHARACTERS[id];
+    const probeK = 2;
+    const probe = bounds(await rasterize(renderCharacter(ch, 'idle', 0, { shadow: false }), probeK));
+    const k = tall / (ch.anchor[1] - (AREA.y + probe.top / probeK));
+    const clips = [];
+    let all = null;
+    for (const action of ACTIONS.filter((a) => ch.anims[a])) {
+      const fps = FPS[action] ?? 24;
+      const count = Math.max(1, Math.round(ch.anims[action].duration * fps));
+      const frames = [];
+      for (let i = 0; i < count; i++) {
+        const phase = i / count;
+        const canvas = await rasterize(renderCharacter(ch, action, phase, { blink: action === 'idle' ? phase : null }), k);
+        const b = bounds(canvas);
+        if (b) all = all ? { left: Math.min(all.left, b.left), top: Math.min(all.top, b.top), right: Math.max(all.right, b.right), bottom: Math.max(all.bottom, b.bottom) } : b;
+        frames.push(canvas);
+      }
+      clips.push({ action, fps, frames });
+    }
+    const pad = 2;
+    const left = Math.max(0, all.left - pad), top = Math.max(0, all.top - pad);
+    const width = Math.min(Math.ceil(AREA.w * k), all.right + pad) - left, height = Math.min(Math.ceil(AREA.h * k), all.bottom + pad) - top;
+    const rgba = clips.flatMap((clip) => clip.frames.map((canvas) => {
+      const crop = new OffscreenCanvas(width, height);
+      const g = crop.getContext('2d');
+      g.drawImage(canvas, -left, -top);
+      return g.getImageData(0, 0, width, height);
+    }));
+    const encoded = await png8.encodeFrames8(rgba);
+    let at = 0;
+    const out = clips.map((clip) => ({ action: clip.action, fps: clip.fps, frames: clip.frames.map(() => base64(encoded[at++])) }));
+    const px = (point) => [Math.round(((point[0] - AREA.x) * k - left) * 100) / 100, Math.round(((point[1] - AREA.y) * k - top) * 100) / 100];
+    return { name: ch.name, width, height, anchor: px(ch.anchor), head: ch.head ? px(ch.head) : undefined, tall, faces: 1, clips: out };
+  };
+
+  /** The effects' area, in their units (the character 100 tall, the origin at the head or the feet). */
+  const FX_AREA = { x: -130, y: -145, w: 260, h: 205 };
+
+  async function rasterizeIn(area, markup, k) {
+    const w = Math.ceil(area.w * k), h = Math.ceil(area.h * k);
+    const doc = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="${area.x} ${area.y} ${area.w} ${area.h}">${markup}</svg>`;
+    const img = new Image();
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(doc);
+    await img.decode();
+    const canvas = new OffscreenCanvas(w, h);
+    canvas.getContext('2d').drawImage(img, 0, 0);
+    return canvas;
+  }
+
+  /**
+   * Every effect's loop rendered, `k` pixels a unit (the character 100 units tall), cropped to what any frame draws:
+   * the manifest of effects.char (each clip says what it is attached to and whether it turns with the character).
+   */
+  window.bakeEffects = async ({ k = 1.6 } = {}) => {
+    const png8 = await import('./png8.js');
+    const clips = [];
+    let all = null;
+    for (const [id, fx] of Object.entries(EFFECTS)) {
+      const fps = fx.duration <= 1.2 ? 24 : 20;
+      const count = Math.max(1, Math.round(fx.duration * fps));
+      const frames = [];
+      for (let i = 0; i < count; i++) {
+        const canvas = await rasterizeIn(FX_AREA, fx.draw(i / count), k);
+        const b = bounds(canvas);
+        if (b) all = all ? { left: Math.min(all.left, b.left), top: Math.min(all.top, b.top), right: Math.max(all.right, b.right), bottom: Math.max(all.bottom, b.bottom) } : b;
+        frames.push(canvas);
+      }
+      clips.push({ action: id, fps, frames, at: fx.at, mirror: fx.mirror });
+    }
+    const pad = 2;
+    const left = Math.max(0, all.left - pad), top = Math.max(0, all.top - pad);
+    const width = Math.min(Math.ceil(FX_AREA.w * k), all.right + pad) - left, height = Math.min(Math.ceil(FX_AREA.h * k), all.bottom + pad) - top;
+    const out = [];
+    for (const clip of clips) {
+      const rgba = clip.frames.map((canvas) => {
+        const crop = new OffscreenCanvas(width, height);
+        const g = crop.getContext('2d');
+        g.drawImage(canvas, -left, -top);
+        return g.getImageData(0, 0, width, height);
+      });
+      // A palette for each effect: their colours differ.
+      const encoded = await png8.encodeFrames8(rgba);
+      out.push({ action: clip.action, fps: clip.fps, at: clip.at, mirror: clip.mirror, frames: encoded.map((e) => base64(e)) });
+    }
+    const anchor = [Math.round((-FX_AREA.x * k - left) * 100) / 100, Math.round((-FX_AREA.y * k - top) * 100) / 100];
+    return { name: 'Effects', width, height, anchor, tall: Math.round(100 * k * 100) / 100, faces: 1, clips: out };
+  };
+
+  // Seeing them: every character's clips, playing.
+  if (!navigator.webdriver && !location.search.includes('bake')) {
+    const root = document.getElementById('root');
+    const cells = [];
+    for (const ch of Object.values(CHARACTERS)) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      for (const action of ACTIONS.filter((a) => ch.anims[a])) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.innerHTML = `<div class="stage"><svg width="220" height="220" viewBox="${AREA.x} ${AREA.y} ${AREA.w} ${AREA.h}"></svg></div><div>${ch.name} · ${action}</div>`;
+        row.appendChild(cell);
+        cells.push({ svg: cell.querySelector('svg'), ch, action });
+      }
+      root.appendChild(row);
+    }
+    // The effects, on Mochi standing (each at its head or its feet).
+    const fxRow = document.createElement('div');
+    fxRow.className = 'row';
+    const fxCells = [];
+    const mochi = CHARACTERS.mochi;
+    const unit = (mochi.anchor[1] - 50) / 100;
+    for (const [id, fx] of Object.entries(EFFECTS)) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.innerHTML = `<div class="stage"><svg width="220" height="220" viewBox="${AREA.x} ${AREA.y} ${AREA.w} ${AREA.h}"></svg></div><div>${id}</div>`;
+      fxRow.appendChild(cell);
+      fxCells.push({ svg: cell.querySelector('svg'), id, fx });
+    }
+    root.appendChild(fxRow);
+    const draw = (now) => {
+      for (const c of fxCells) {
+        const at = c.fx.at === 'head' ? mochi.head : mochi.anchor;
+        const phase = ((now / 1000 / c.fx.duration) % 1 + 1) % 1;
+        c.svg.innerHTML = renderCharacter(mochi, 'idle', ((now / 1000 / mochi.anims.idle.duration) % 1 + 1) % 1) + `<g transform="translate(${at[0]} ${at[1]}) scale(${unit})">${c.fx.draw(phase)}</g>`;
+      }
+      for (const c of cells) {
+        const phase = ((now / 1000 / c.ch.anims[c.action].duration) % 1 + 1) % 1;
+        c.svg.innerHTML = renderCharacter(c.ch, c.action, phase, { blink: c.action === 'idle' ? phase : null });
+      }
+      requestAnimationFrame(draw);
+    };
+    requestAnimationFrame(draw);
+  }
+</script>
+</body>
+</html>

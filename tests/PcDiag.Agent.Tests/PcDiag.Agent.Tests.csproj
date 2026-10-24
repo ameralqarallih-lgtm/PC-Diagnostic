@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The Agent's composition and tray helpers. Windows only. -->
+  <PropertyGroup>
+    <TargetFramework>$(PcDiagWindowsTfm)</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="Shouldly" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+    <Using Include="Shouldly" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\PcDiag.Agent\PcDiag.Agent.csproj" />
+  </ItemGroup>
+</Project>

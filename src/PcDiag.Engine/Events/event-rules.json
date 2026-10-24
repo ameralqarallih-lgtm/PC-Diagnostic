@@ -1,0 +1,530 @@
+// Windows event classification rules (shipped defaults).
+//
+// Each rule selects events by channel, provider, event ID, level and optional field conditions, and labels them
+// with a category, a severity and a title. Ignore rules drop known noise and win over every other rule; otherwise
+// the first matching rule (in this order) wins. Only matching events are recorded; the event log is never copied
+// wholesale.
+//
+// To change a rule, copy it into %LOCALAPPDATA%\PcDiagnostic\event-rules.json (same structure) and edit it there:
+// a rule with the same id replaces the shipped one, new rules take precedence over shipped ones, and
+// { "id": "...", "enabled": false } switches a shipped rule off. Changes apply the next time recording starts.
+//
+// Field sources: a Data/UserData name ("ProcessId"), a position ("#0"), "$pid" (the process that logged the event)
+// or "$binaryText" (binary data decoded as text). "A|B" uses the first non-empty source. Transforms after ":":
+// hex (number to 0x hex), prefix0x, file (path to file name), firstLineValue ("Key: value" on the first line).
+// The fields pid, processName, processStart, device and service fill the event's columns; others become event data.
+{
+  "version": 1,
+  "rules": [
+    // ---------------------------------------------------------------- noise
+    {
+      "id": "noise.dcom",
+      "channel": "System",
+      "providers": [ "Microsoft-Windows-DistributedCOM" ],
+      "eventIds": [ 10010, 10016 ],
+      "ignore": true,
+      "note": "DCOM activation-permission and registration-timeout messages; very frequent and documented by Microsoft as safe to ignore (10016)."
+    },
+
+    // ---------------------------------------------------------------- GPU and display drivers
+    {
+      "id": "gpu.tdr",
+      "channel": "System",
+      "providers": [ "Display" ],
+      "eventIds": [ 4101 ],
+      "category": "Gpu",
+      "severity": "High",
+      "title": "Display driver stopped responding and recovered (TDR)",
+      "fields": { "device": "#0" }
+    },
+    {
+      "id": "gpu.nvidia.error",
+      "channel": "System",
+      "providers": [ "nvlddmkm" ],
+      "levels": [ 1, 2 ],
+      "category": "Gpu",
+      "severity": "High",
+      "title": "NVIDIA display driver error (nvlddmkm {eventId})",
+      "fields": { "device": "#0", "detail": "#1" },
+      "note": "Verified layout for 153: #0 is the video device (\\Device\\VideoN), #1 the driver's detail text. The driver ships no message text for these IDs."
+    },
+    {
+      "id": "gpu.amd.error",
+      "channel": "System",
+      "providers": [ "amdkmdag", "amdkmdap", "amdwddmg" ],
+      "levels": [ 1, 2 ],
+      "category": "Gpu",
+      "severity": "High",
+      "title": "AMD display driver error ({provider} {eventId})"
+    },
+    {
+      "id": "gpu.intel.error",
+      "channel": "System",
+      "providers": [ "igfx", "igfxn", "igfxnd" ],
+      "levels": [ 1, 2 ],
+      "category": "Gpu",
+      "severity": "High",
+      "title": "Intel display driver error ({provider} {eventId})"
+    },
+    {
+      "id": "gpu.dxgkrnl",
+      "channel": "System",
+      "providers": [ "Microsoft-Windows-DxgKrnl" ],
+      "levels": [ 1, 2, 3 ],
+      "category": "Gpu",
+      "severity": "Medium",
+      "title": "Graphics kernel reported a problem (DxgKrnl {eventId})"
+    },
+    {
+      "id": "gpu.dxgkrnl.adapter-start",
+      "channel": "Microsoft-Windows-DxgKrnl-Admin",
+      "providers": [ "Microsoft-Windows-DxgKrnl" ],
+      "eventIds": [ 456, 457, 549 ],
+      "category": "Gpu",
+      "severity": "High",
+      "title": "The graphics driver could not start the GPU (DxgKrnl {eventId})",
+      "fields": { "status": "#4|#1" },
+      "note": "Layouts from the provider's manifest: 456/457 'Miniport driver failed to add/start device with status %5' (#4); 549 'Adapter start failed for VendorId (%1) ... status (%2), reason (%3)' (#0-#2)."
+    },
+    {
+      "id": "gpu.dxgkrnl.admin",
+      "channel": "Microsoft-Windows-DxgKrnl-Admin",
+      "providers": [ "Microsoft-Windows-DxgKrnl" ],
+      "levels": [ 1, 2 ],
+      "category": "Gpu",
+      "severity": "Medium",
+      "title": "Graphics kernel reported a problem (DxgKrnl {eventId})",
+      "note": "The Admin channel holds only errors: virtual GPU creation/opening failures (445, 453, 463) and a session stop that failed to release the GPU (465). The Operational channel holds only informational virtual GPU progress (446, 447, 454, 455, 464), so it is not subscribed."
+    },
+
+    // ---------------------------------------------------------------- unexpected shutdowns and bug checks
+    {
+      "id": "shutdown.unexpected.bugcheck",
+      "channel": "System",
+      "providers": [ "Microsoft-Windows-Kernel-Power" ],
+      "eventIds": [ 41 ],
+      "when": [ { "field": "BugcheckCode", "notEquals": "0" } ],
+      "category": "UnexpectedShutdown",
+      "severity": "Critical",
+      "title": "Unexpected restart after bug check {bugcheck} (Kernel-Power 41)",
+      "fields": { "bugcheck": "BugcheckCode:hex", "checkpoint": "Checkpoint", "sleepInProgress": "SleepInProgress" },
+      "sinceBoot": true
+    },
+    {
+      "id": "shutdown.unexpected",
+      "channel": "System",
+      "providers": [ "Microsoft-Windows-Kernel-Power" ],
+      "eventIds": [ 41 ],
+      "category": "UnexpectedShutdown",
+      "severity": "Critical",
+      "title": "Unexpected restart: Windows did not shut down cleanly (Kernel-Power 41)",
+      "fields": { "checkpoint": "Checkpoint", "sleepInProgress": "SleepInProgress", "powerButtonTimestamp": "PowerButtonTimestamp" },
+      "sinceBoot": true,
+      "note": "Windows logs this at boot. It does not say why; possible explanations include a hang, a crash without a dump, or a power loss."
+    },
+    {
+      "id": "shutdown.unexpected.previous",
+      "channel": "System",
+      "providers": [ "EventLog" ],
+      "eventIds": [ 6008 ],
+      "category": "UnexpectedShutdown",
+      "severity": "High",
+      "title": "The previous shutdown at {time} on {date} was unexpected",
+      "fields": { "time": "#0", "date": "#1" },
+      "sinceBoot": true
+    },
+    {
+      "id": "bugcheck",
+      "channel": "System",
+      "providers": [ "Microsoft-Windows-WER-SystemErrorReporting" ],
+      "eventIds": [ 1001 ],
+      "category": "BugCheck",
+      "severity": "Critical",
+      "title": "The computer restarted after a bug check (blue screen): {bugcheck}",
+      "fields": { "bugcheck": "#0", "dumpFile": "#1", "reportId": "#2" },
+      "sinceBoot": true
+    },
+
+    // ---------------------------------------------------------------- hardware errors (WHEA)
+    {
+      "id": "hardware.whea.error",
+      "channel": "System",
+      "providers": [ "Microsoft-Windows-WHEA-Logger" ],
+      "levels": [ 1, 2 ],
+      "category": "HardwareError",
+      "severity": "Critical",
+      "title": "Uncorrected hardware error reported by WHEA (event {eventId})",
+      "fields": { "device": "PrimaryDeviceName", "errorSource": "ErrorSource", "errorType": "ErrorType" },
+      "sinceBoot": true
+    },
+    {
+      "id": "hardware.whea.corrected",
+      "channel": "System",
+      "providers": [ "Microsoft-Windows-WHEA-Logger" ],
+      "levels": [ 3 ],
+      "category": "HardwareError",
+      "severity": "Medium",
+      "title": "Corrected hardware error reported by WHEA (event {eventId})",
+      "fields": { "device": "PrimaryDeviceName", "errorSource": "ErrorSource", "errorType": "ErrorType" }
+    },
+    {
+      "id": "hardware.whea.info",
+      "channel": "System",
+      "providers": [ "Microsoft-Windows-WHEA-Logger" ],
+      "levels": [ 0, 4 ],
+      "category": "HardwareError",
+      "severity": "Info",
+      "title": "Informational hardware record from WHEA (event {eventId})"
+    },
+
+    // ---------------------------------------------------------------- disks, storage controllers, file system
+    {
+      "id": "disk.error",
+      "channel": "System",
+      "providers": [ "disk" ],
+      "eventIds": [ 7, 11, 51, 154 ],
+      "category": "Disk",
+      "severity": "High",
+      "title": "Disk error reported by the disk driver (disk {eventId})",
+      "fields": { "device": "#0" }
+    },
+    {
+      "id": "disk.retry",
+      "channel": "System",
+      "providers": [ "disk" ],
+      "eventIds": [ 153 ],
+      "category": "Disk",
+      "severity": "Medium",
+      "title": "A disk I/O operation was retried (disk 153)"
+    },
+    {
+      "id": "disk.removed",
+      "channel": "System",
+      "providers": [ "disk" ],
+      "eventIds": [ 157 ],
+      "category": "Disk",
+      "severity": "Medium",
+      "title": "A disk was removed unexpectedly (disk 157)"
+    },
+    {
+      "id": "storage.controller.reset",
+      "channel": "System",
+      "providers": [ "storahci", "stornvme", "storport", "iaStorA", "iaStorAC", "iaStorAVC", "iaStorVD", "secnvme", "amdsata", "amdsbs" ],
+      "eventIds": [ 129 ],
+      "category": "Disk",
+      "severity": "High",
+      "title": "Storage controller reset was issued ({provider} 129)"
+    },
+    {
+      "id": "storage.controller.error",
+      "channel": "System",
+      "providers": [ "storahci", "stornvme", "iaStorA", "iaStorAC", "iaStorAVC", "iaStorVD", "secnvme" ],
+      "eventIds": [ 11 ],
+      "category": "Disk",
+      "severity": "High",
+      "title": "Storage controller error ({provider} 11)"
+    },
+    {
+      "id": "filesystem.ntfs",
+      "channel": "System",
+      "providers": [ "Ntfs", "Microsoft-Windows-Ntfs" ],
+      "eventIds": [ 55, 98, 137, 140 ],
+      "levels": [ 1, 2, 3 ],
+      "category": "FileSystem",
+      "severity": "High",
+      "title": "NTFS reported a problem (Ntfs {eventId})",
+      "fields": { "device": "DeviceName|DriveName" },
+      "note": "Level filter matters: Ntfs 98 is also logged as information ('volume is healthy')."
+    },
+
+    // ---------------------------------------------------------------- memory and resources
+    {
+      "id": "resource.low-virtual-memory",
+      "channel": "System",
+      "providers": [ "Microsoft-Windows-Resource-Exhaustion-Detector" ],
+      "eventIds": [ 2004 ],
+      "category": "ResourceExhaustion",
+      "severity": "High",
+      "title": "Windows detected low virtual memory (Resource-Exhaustion-Detector 2004)"
+    },
+
+    // ---------------------------------------------------------------- network
+    {
+      "id": "network.port-exhaustion",
+      "channel": "System",
+      "providers": [ "Tcpip" ],
+      "eventIds": [ 4231, 4266 ],
+      "category": "Network",
+      "severity": "Medium",
+      "title": "No ephemeral network ports were available (Tcpip {eventId})"
+    },
+    {
+      "id": "network.ethernet.link-down.intel",
+      "channel": "System",
+      "providers": [ "e1cexpress", "e1dexpress", "e1iexpress", "e1qexpress", "e1rexpress", "e2fexpress", "e2fnexpress" ],
+      "eventIds": [ 27 ],
+      "category": "Network",
+      "severity": "Medium",
+      "title": "Ethernet link disconnected: {device}",
+      "fields": { "device": "#1" },
+      "note": "Intel Ethernet drivers log 27 for 'Network link is disconnected'; layout verified for e2fnexpress (I226-V)."
+    },
+    {
+      "id": "network.wifi.disconnected",
+      "channel": "Microsoft-Windows-WLAN-AutoConfig/Operational",
+      "providers": [ "Microsoft-Windows-WLAN-AutoConfig" ],
+      "eventIds": [ 8003 ],
+      "category": "Network",
+      "severity": "Medium",
+      "title": "Wi-Fi disconnected: {reason}",
+      "fields": { "reason": "Reason", "reasonCode": "ReasonCode", "device": "InterfaceDescription" },
+      "storeMessage": false,
+      "note": "The message and other fields contain the network name (SSID/profile), so only the reason and adapter are kept."
+    },
+
+    // ---------------------------------------------------------------- devices and drivers
+    {
+      "id": "device.driver-load-failed",
+      "channel": "System",
+      "providers": [ "Microsoft-Windows-Kernel-PnP" ],
+      "eventIds": [ 219 ],
+      "category": "Device",
+      "severity": "Medium",
+      "title": "A driver failed to load for a device (Kernel-PnP 219)"
+    },
+    {
+      "id": "device.start-problem",
+      "channel": "System",
+      "providers": [ "Microsoft-Windows-Kernel-PnP" ],
+      "eventIds": [ 411 ],
+      "category": "Device",
+      "severity": "Medium",
+      "title": "A device had a problem starting (Kernel-PnP 411)"
+    },
+    {
+      "id": "device.driver-installed",
+      "channel": "System",
+      "providers": [ "Microsoft-Windows-UserPnp" ],
+      "eventIds": [ 20001, 20003 ],
+      "category": "Device",
+      "severity": "Info",
+      "title": "Driver installed or updated for a device (UserPnp {eventId})",
+      "fields": { "device": "DeviceInstanceID", "driverService": "ServiceName", "driverFile": "DriverFileName:file" }
+    },
+
+    // ---------------------------------------------------------------- Windows services (SCM)
+    {
+      "id": "service.start-failed",
+      "channel": "System",
+      "providers": [ "Service Control Manager" ],
+      "eventIds": [ 7000, 7022 ],
+      "category": "Service",
+      "severity": "Medium",
+      "title": "Service failed to start: {serviceDisplay}",
+      "fields": { "service": "$binaryText", "serviceDisplay": "param1|#0" }
+    },
+    {
+      "id": "service.start-timeout",
+      "channel": "System",
+      "providers": [ "Service Control Manager" ],
+      "eventIds": [ 7009, 7011 ],
+      "category": "Service",
+      "severity": "Medium",
+      "title": "Service did not respond in time: {serviceDisplay}",
+      "fields": { "service": "$binaryText", "serviceDisplay": "param2|#1", "timeoutMs": "param1|#0" }
+    },
+    {
+      "id": "service.stopped-with-error",
+      "channel": "System",
+      "providers": [ "Service Control Manager" ],
+      "eventIds": [ 7023, 7024 ],
+      "category": "Service",
+      "severity": "Medium",
+      "title": "Service stopped with an error: {serviceDisplay}",
+      "fields": { "service": "$binaryText", "serviceDisplay": "param1|#0", "error": "param2|#1" }
+    },
+    {
+      "id": "service.crashed",
+      "channel": "System",
+      "providers": [ "Service Control Manager" ],
+      "eventIds": [ 7031, 7034 ],
+      "category": "Service",
+      "severity": "Medium",
+      "title": "Service terminated unexpectedly: {serviceDisplay}",
+      "fields": { "service": "$binaryText", "serviceDisplay": "param1|#0", "count": "param2|#1" }
+    },
+
+    // ---------------------------------------------------------------- time and power
+    {
+      "id": "time.changed",
+      "channel": "System",
+      "providers": [ "Microsoft-Windows-Kernel-General" ],
+      "eventIds": [ 1 ],
+      "when": [ { "field": "TimeDeltaInMs", "minAbs": 2000 } ],
+      "category": "TimeChange",
+      "severity": "Low",
+      "title": "System time changed by {deltaMs} ms",
+      "fields": { "deltaMs": "TimeDeltaInMs", "oldTime": "OldTime", "newTime": "NewTime", "reason": "Reason", "processName": "ProcessName:file", "pid": "ProcessID" },
+      "note": "Small adjustments (time sync) are frequent and not recorded; jumps matter when reading a timeline."
+    },
+    {
+      "id": "power.os-started",
+      "channel": "System",
+      "providers": [ "Microsoft-Windows-Kernel-General" ],
+      "eventIds": [ 12 ],
+      "category": "Power",
+      "severity": "Info",
+      "title": "Windows started",
+      "fields": { "build": "BuildVersion", "revision": "QfeVersion" },
+      "sinceBoot": true
+    },
+    {
+      "id": "power.os-shutdown",
+      "channel": "System",
+      "providers": [ "Microsoft-Windows-Kernel-General" ],
+      "eventIds": [ 13 ],
+      "category": "Power",
+      "severity": "Info",
+      "title": "Windows shut down"
+    },
+    {
+      "id": "power.shutdown-requested",
+      "channel": "System",
+      "providers": [ "User32" ],
+      "eventIds": [ 1074 ],
+      "category": "Power",
+      "severity": "Info",
+      "title": "Shutdown or restart requested by {processName} ({kind})",
+      "fields": { "processName": "param1:file", "kind": "param5", "reason": "param3" },
+      "storeMessage": false,
+      "note": "The message includes the account name, so only the requesting program, type and reason are kept."
+    },
+    {
+      "id": "power.sleep",
+      "channel": "System",
+      "providers": [ "Microsoft-Windows-Kernel-Power" ],
+      "eventIds": [ 42 ],
+      "category": "Power",
+      "severity": "Info",
+      "title": "System entering sleep",
+      "fields": { "targetState": "TargetState", "reason": "Reason" }
+    },
+    {
+      "id": "power.resume",
+      "channel": "System",
+      "providers": [ "Microsoft-Windows-Kernel-Power" ],
+      "eventIds": [ 107 ],
+      "category": "Power",
+      "severity": "Info",
+      "title": "System resumed from sleep"
+    },
+
+    // ---------------------------------------------------------------- catch-all for the System log
+    {
+      "id": "system.other-error",
+      "channel": "System",
+      "levels": [ 1, 2 ],
+      "category": "Other",
+      "severity": "Low",
+      "title": "{provider} reported an error (event {eventId})",
+      "note": "Critical and error events from any provider not classified above. Warnings are not collected wholesale."
+    },
+
+    // ---------------------------------------------------------------- applications (Application log)
+    {
+      "id": "app.crash",
+      "channel": "Application",
+      "providers": [ "Application Error" ],
+      "eventIds": [ 1000 ],
+      "category": "ApplicationCrash",
+      "severity": "High",
+      "title": "{processName} crashed ({exceptionCode} in {module})",
+      "fields": {
+        "processName": "AppName",
+        "pid": "ProcessId",
+        "processStart": "ProcessCreationTime",
+        "exceptionCode": "ExceptionCode:prefix0x",
+        "module": "ModuleName",
+        "moduleVersion": "ModuleVersion",
+        "appVersion": "AppVersion",
+        "faultOffset": "FaultingOffset:prefix0x",
+        "appPath": "AppPath",
+        "modulePath": "ModulePath",
+        "reportId": "IntegratorReportId"
+      }
+    },
+    {
+      "id": "app.hang",
+      "channel": "Application",
+      "providers": [ "Application Hang" ],
+      "eventIds": [ 1002 ],
+      "category": "ApplicationHang",
+      "severity": "High",
+      "title": "{processName} stopped responding and was closed",
+      "fields": {
+        "processName": "AppName",
+        "pid": "ProcessId",
+        "processStart": "StartTime",
+        "appVersion": "AppVersion",
+        "hangType": "HangType",
+        "appPath": "ExeFileName",
+        "reportId": "ReportId"
+      }
+    },
+    {
+      "id": "app.dotnet-unhandled-exception",
+      "channel": "Application",
+      "providers": [ ".NET Runtime" ],
+      "eventIds": [ 1026 ],
+      "category": "ApplicationCrash",
+      "severity": "High",
+      "title": "{processName} terminated by an unhandled .NET exception",
+      "fields": { "processName": "#0:firstLineValue", "pid": "$pid" },
+      "note": ".NET logs this from the failing process, so the logging process ID is the crashed process."
+    },
+    {
+      "id": "wer.live-kernel.video-timeout",
+      "channel": "Application",
+      "providers": [ "Windows Error Reporting" ],
+      "eventIds": [ 1001 ],
+      "when": [ { "field": "EventName|#2", "equals": "LiveKernelEvent" }, { "field": "P1|#5", "equals": "141" } ],
+      "category": "Gpu",
+      "severity": "High",
+      "title": "Live kernel event 141: video engine timeout detected (Windows Error Reporting)",
+      "fields": { "code": "P1|#5", "reportId": "ReportId|#19" },
+      "note": "Positions checked against the provider's manifest (Bucket, BucketType, EventName #2, Response, CabId, P1 #5 ... ReportId #19); the names are used first, the positions when an event carries none."
+    },
+    {
+      "id": "wer.live-kernel.video-tdr",
+      "channel": "Application",
+      "providers": [ "Windows Error Reporting" ],
+      "eventIds": [ 1001 ],
+      "when": [ { "field": "EventName|#2", "equals": "LiveKernelEvent" }, { "field": "P1|#5", "equals": "117" } ],
+      "category": "Gpu",
+      "severity": "High",
+      "title": "Live kernel event 117: video TDR timeout detected (Windows Error Reporting)",
+      "fields": { "code": "P1|#5", "reportId": "ReportId|#19" }
+    },
+    {
+      "id": "wer.live-kernel",
+      "channel": "Application",
+      "providers": [ "Windows Error Reporting" ],
+      "eventIds": [ 1001 ],
+      "when": [ { "field": "EventName|#2", "equals": "LiveKernelEvent" } ],
+      "category": "Kernel",
+      "severity": "Medium",
+      "title": "Live kernel event {code} (Windows Error Reporting)",
+      "fields": { "code": "P1|#5", "reportId": "ReportId|#19" }
+    },
+    {
+      "id": "wer.report",
+      "channel": "Application",
+      "providers": [ "Windows Error Reporting" ],
+      "eventIds": [ 1001 ],
+      "category": "WindowsErrorReporting",
+      "severity": "Low",
+      "title": "Windows Error Reporting: {eventName}",
+      "fields": { "eventName": "EventName|#2", "p1": "P1|#5", "p2": "P2|#6" }
+    }
+  ]
+}

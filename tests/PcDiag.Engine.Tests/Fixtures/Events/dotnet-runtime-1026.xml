@@ -1,0 +1,15 @@
+﻿<Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'><System><Provider Name='.NET Runtime'/><EventID Qualifiers='0'>1026</EventID><Version>0</Version><Level>2</Level><Task>0</Task><Opcode>0</Opcode><Keywords>0x80000000000000</Keywords><TimeCreated SystemTime='2026-10-02T09:25:21.7084697Z'/><EventRecordID>162589</EventRecordID><Correlation/><Execution ProcessID='2484' ThreadID='0'/><Channel>Application</Channel><Computer>TEST-PC</Computer><Security/></System><EventData><Data>Application: IAStorDataMgrSvc.exe
+Framework Version: v4.0.30319
+Description: The process was terminated due to an unhandled exception.
+Exception Info: System.NullReferenceException
+   at IAStorUtil.SystemDataModelListener.ProcessSystemDataModelChanges()
+   at IAStorUtil.SystemDataModelListener.LoadSavedSystemState()
+   at IAStorDataMgr.EventRelay.&lt;Start&gt;b__12_0(System.Object)
+   at System.Threading.QueueUserWorkItemCallback.WaitCallback_Context(System.Object)
+   at System.Threading.ExecutionContext.RunInternal(System.Threading.ExecutionContext, System.Threading.ContextCallback, System.Object, Boolean)
+   at System.Threading.ExecutionContext.Run(System.Threading.ExecutionContext, System.Threading.ContextCallback, System.Object, Boolean)
+   at System.Threading.QueueUserWorkItemCallback.System.Threading.IThreadPoolWorkItem.ExecuteWorkItem()
+   at System.Threading.ThreadPoolWorkQueue.Dispatch()
+   at System.Threading._ThreadPoolWaitCallback.PerformWaitCallback()
+
+</Data></EventData></Event>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press the app icon (or drag it to the home screen): capture an incident on the PC in one tap,
+     e.g. while a game is full screen there. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@drawable/ic_capture"
+        android:shortcutId="capture"
+        android:shortcutLongLabel="@string/capture_long"
+        android:shortcutShortLabel="@string/capture_short">
+        <intent
+            android:action="com.pcdiagnostic.companion.CAPTURE"
+            android:targetClass="com.pcdiagnostic.companion.MainActivity"
+            android:targetPackage="com.pcdiagnostic.companion" />
+    </shortcut>
+</shortcuts>

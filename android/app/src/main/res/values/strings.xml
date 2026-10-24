@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PC Diagnostic</string>
+    <string name="capture_short">Capture</string>
+    <string name="capture_long">Capture incident on the PC</string>
+</resources>

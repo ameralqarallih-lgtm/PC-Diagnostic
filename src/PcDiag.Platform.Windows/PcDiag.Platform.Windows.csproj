@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Thin, documented Win32 interop (PDH, kernel32, powrprof) behind small safe wrappers. -->
+  <PropertyGroup>
+    <TargetFramework>$(PcDiagWindowsTfm)</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Microsoft.Win32.SystemEvents" />
+    <PackageReference Include="System.Diagnostics.EventLog" />
+    <PackageReference Include="System.Management" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PcDiag.Core\PcDiag.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="PcDiag.Collectors.IntegrationTests" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The flight recorder's WPR profile goes next to the program (Program Files when installed). -->
+    <None Update="Tracing\PcDiagnostic.wprp" Link="PcDiagnostic.wprp" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

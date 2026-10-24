@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- What sensor drivers reach their devices with (local-network HTTP, serial ports, HID). Used only by the screen
+       host, which runs without administrator rights: the recorder itself has no network code. -->
+  <PropertyGroup>
+    <TargetFramework>$(PcDiagWindowsTfm)</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.IO.Ports" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PcDiag.Platform.Windows\PcDiag.Platform.Windows.csproj" />
+    <ProjectReference Include="..\PcDiag.Screens.Sdk\PcDiag.Screens.Sdk.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="PcDiag.Agent.Tests" />
+  </ItemGroup>
+</Project>

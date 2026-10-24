@@ -1,0 +1,46 @@
+plugins {
+    id 'com.android.application'
+}
+
+// The PC Diagnostic companion: pairs with the PC over the home network (HTTPS, pinned certificate) and shows the
+// PC's own dashboard. Platform APIs only: no third-party libraries.
+android {
+    namespace 'com.pcdiagnostic.companion'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.pcdiagnostic.companion'
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    // Release signing: the keystore and its passwords come from the environment (never from the repository).
+    // Create the key once with keytool and keep it safe: Android only installs updates signed with the same key.
+    def keystore = System.getenv('PCDIAG_KEYSTORE')
+    signingConfigs {
+        release {
+            if (keystore) {
+                storeFile file(keystore)
+                storePassword System.getenv('PCDIAG_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('PCDIAG_KEY_ALIAS') ?: 'pcdiagnostic'
+                keyPassword System.getenv('PCDIAG_KEY_PASSWORD') ?: System.getenv('PCDIAG_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (keystore) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

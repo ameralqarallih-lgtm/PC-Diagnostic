@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "statuses": ["low", "normal", "high", "critical"],
+  "effects": [
+    ["zzz", "Sleepy zZ"],
+    ["sweat", "Sweat drops"],
+    ["stars", "Dizzy stars"],
+    ["exclaim", "Alarm (!)"],
+    ["snow", "Snowflakes"],
+    ["steam", "Steam"],
+    ["flame", "Flame"],
+    ["dots", "Waiting (…)"],
+    ["data", "Data stream"],
+    ["sparks", "Sparks"],
+    ["notes", "Music notes"],
+    ["rain", "Rain cloud"],
+    ["hearts", "Hearts"],
+    ["wind", "Wind"]
+  ],
+  "props": [
+    { "id": "ice-pack", "name": "Ice pack", "at": "head", "size": 0.26, "width": 0.253, "grip": 0.12, "motion": "none", "emit": "drip" },
+    { "id": "siren", "name": "Siren light", "at": "head", "size": 0.28, "width": 0.193, "grip": 0.06, "motion": "none", "emit": "glow" },
+    { "id": "umbrella", "name": "Umbrella", "at": "above", "size": 0.75, "width": 0.562, "grip": 0.6, "motion": "sway", "emit": null, "behind": true },
+    { "id": "desk-fan", "name": "Desk fan", "at": "beside", "size": 0.45, "width": 0.217, "grip": 0, "motion": "wobble", "emit": "wind", "mirror": true },
+    { "id": "coffee", "name": "Coffee", "at": "front", "size": 0.2, "width": 0.215, "grip": 0, "motion": "none", "emit": "steam" },
+    { "id": "trophy", "name": "Trophy", "at": "beside", "size": 0.38, "width": 0.323, "grip": 0, "motion": "none", "emit": "sparkle" },
+    { "id": "cone", "name": "Traffic cone", "at": "beside", "size": 0.36, "width": 0.29, "grip": 0, "motion": "none", "emit": null },
+    { "id": "toolbox", "name": "Toolbox", "at": "beside", "size": 0.28, "width": 0.282, "grip": 0, "motion": "none", "emit": null },
+    { "id": "boxes", "name": "Boxes", "at": "beside", "size": 0.5, "width": 0.4, "grip": 0, "motion": "none", "emit": null },
+    { "id": "thermometer", "name": "Thermometer", "at": "beside", "size": 0.5, "width": 0.11, "grip": 0, "motion": "bob", "emit": null },
+    { "id": "battery", "name": "Battery", "at": "beside", "size": 0.34, "width": 0.18, "grip": 0, "motion": "none", "emit": null },
+    { "id": "extinguisher", "name": "Fire extinguisher", "at": "hand", "size": 0.42, "width": 0.233, "grip": 0.45, "motion": "none", "emit": "foam", "mirror": true, "nozzle": [0.08, 0.38] },
+    { "id": "hose", "name": "Hose", "at": "hand", "size": 0.22, "width": 0.223, "grip": 0.15, "motion": "none", "emit": "water", "mirror": true, "nozzle": [0.11, 0.15] },
+    { "id": "popcorn", "name": "Popcorn", "at": "front", "size": 0.24, "width": 0.182, "grip": 0, "motion": "none", "emit": null }
+  ],
+  "kinds": {
+    "load": {
+      "name": "Performance",
+      "bad": "up",
+      "low": 12,
+      "high": 75,
+      "critical": 92,
+      "reactions": { "low": ["sleep", "zzz"], "normal": ["default", null], "high": ["worried", "sweat"], "critical": ["panic", "exclaim"] },
+      "props": { "high": "cone", "critical": "siren" }
+    },
+    "temperature": {
+      "name": "Temperature",
+      "bad": "up",
+      "low": 40,
+      "high": 75,
+      "critical": 88,
+      "reactions": { "low": ["idle", "snow"], "normal": ["default", null], "high": ["tired", "steam"], "critical": ["panic", "flame"] },
+      "props": { "low": "coffee", "high": "ice-pack", "critical": "extinguisher" }
+    },
+    "bandwidth": {
+      "name": "Bandwidth",
+      "bad": "up",
+      "low": 20000,
+      "high": 5000000,
+      "critical": 50000000,
+      "share": { "low": 0.002, "high": 0.6, "critical": 0.9 },
+      "reactions": { "low": ["sit", "dots"], "normal": ["walk", null], "high": ["run", "data"], "critical": ["worried", "sparks"] },
+      "props": { "critical": "cone" }
+    },
+    "fps": {
+      "name": "Frame rate",
+      "bad": "down",
+      "low": null,
+      "high": 120,
+      "critical": null,
+      "reactions": { "low": ["worried", "rain"], "normal": ["default", null], "high": ["cheer", "notes"], "critical": ["panic", "exclaim"] },
+      "props": { "low": "umbrella", "high": "popcorn", "critical": "siren" }
+    },
+    "frametime": {
+      "name": "Frame time",
+      "bad": "up",
+      "low": 8,
+      "high": null,
+      "critical": null,
+      "reactions": { "low": ["cheer", "notes"], "normal": ["default", null], "high": ["worried", "rain"], "critical": ["panic", "exclaim"] },
+      "props": { "low": "popcorn", "high": "umbrella", "critical": "siren" }
+    },
+    "latency": {
+      "name": "Latency",
+      "bad": "up",
+      "low": 20,
+      "high": 80,
+      "critical": 200,
+      "reactions": { "low": ["play", "hearts"], "normal": ["default", null], "high": ["worried", "dots"], "critical": ["panic", "exclaim"] },
+      "props": { "high": "cone", "critical": "siren" }
+    },
+    "fan": {
+      "name": "Fan speed",
+      "bad": "up",
+      "low": 200,
+      "high": 1800,
+      "critical": 2800,
+      "reactions": { "low": ["sleep", "zzz"], "normal": ["default", null], "high": ["walk", "wind"], "critical": ["worried", "wind"] },
+      "props": { "high": "desk-fan", "critical": "desk-fan" }
+    },
+    "power": {
+      "name": "Power",
+      "bad": "up",
+      "low": 15,
+      "high": 150,
+      "critical": 300,
+      "share": { "low": 0.05, "high": 0.7, "critical": 0.9 },
+      "reactions": { "low": ["sleep", "zzz"], "normal": ["default", null], "high": ["tired", "sparks"], "critical": ["panic", "sparks"] },
+      "props": { "high": "battery", "critical": "hose" }
+    },
+    "other": {
+      "name": "Other readings",
+      "bad": "up",
+      "low": null,
+      "high": null,
+      "critical": null,
+      "reactions": { "low": ["default", null], "normal": ["default", null], "high": ["worried", "exclaim"], "critical": ["panic", "exclaim"] },
+      "props": { "high": "cone", "critical": "siren" }
+    }
+  }
+}

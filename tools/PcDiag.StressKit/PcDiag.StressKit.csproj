@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Real load and real failures for testing the recorder by hand (ARCHITECTURE R8, §13). Not shipped. -->
+  <PropertyGroup>
+    <TargetFramework>$(PcDiagWindowsTfm)</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>PcDiag.StressKit</AssemblyName>
+    <RootNamespace>PcDiag.StressKit</RootNamespace>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+</Project>

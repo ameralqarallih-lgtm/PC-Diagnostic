@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- SQLite schema, migrations and data access. -->
+  <PropertyGroup>
+    <TargetFramework>$(PcDiagTfm)</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PcDiag.Core\PcDiag.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Migrations\**\*.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="PcDiag.Storage.Tests" />
+  </ItemGroup>
+</Project>

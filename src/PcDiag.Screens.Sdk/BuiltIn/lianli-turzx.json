@@ -1,0 +1,19 @@
+{
+  // Lian Li's USB screens (TURZX panels), driven like L-Connect does, without code: the turzx-winusb family.
+  "id": "lianli-turzx",
+  "name": "Lian Li screens",
+  "version": "1.0",
+  "publisher": "PC Diagnostic",
+  "family": "turzx-winusb",
+  "models": [
+    { "id": "universal-88", "name": "Lian Li Universal Screen 8.8″", "vid": "1CBE", "pid": "A088", "width": 480, "height": 1920, "format": "jpeg", "maxBytes": 512000, "maxFps": 30, "rotation": 90, "tested": true },
+    { "id": "vision-92", "name": "Lian Li Vision 9.2″", "vid": "1CBE", "pid": "A092", "width": 464, "height": 1920, "format": "jpeg", "maxBytes": 512000, "maxFps": 30, "rotation": 90 },
+    { "id": "hydroshift2-circle", "name": "Lian Li HydroShift II LCD Circle", "vid": "1CBE", "pid": "A021", "width": 480, "height": 480, "format": "jpeg", "maxBytes": 512000, "maxFps": 30 },
+    { "id": "hydroshift2-square", "name": "Lian Li HydroShift II LCD Square", "vid": "1CBE", "pid": "A034", "width": 480, "height": 480, "format": "jpeg", "maxBytes": 512000, "maxFps": 30 },
+    { "id": "lancool-207-digital", "name": "Lian Li Lancool 207 Digital", "vid": "1CBE", "pid": "A065", "width": 720, "height": 1472, "format": "jpeg", "maxBytes": 512000, "maxFps": 30 }
+  ],
+  "holders": [
+    { "service": "LConnectServiceWatcher", "name": "L-Connect" },
+    { "service": "LConnectService", "name": "L-Connect" }
+  ]
+}

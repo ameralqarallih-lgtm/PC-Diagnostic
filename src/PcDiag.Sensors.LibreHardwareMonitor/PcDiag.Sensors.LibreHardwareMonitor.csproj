@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    IHardwareSensorProvider adapter for LibreHardwareMonitorLib (MPL-2.0, used unmodified).
+    Isolated in its own project so no LHM type leaks into the rest of the application.
+    CPU MSR and motherboard Super I/O sensors need administrator rights AND the PawnIO driver
+    (installed separately; never redistributed by this application).
+  -->
+  <PropertyGroup>
+    <TargetFramework>$(PcDiagWindowsTfm)</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="LibreHardwareMonitorLib" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\PcDiag.Core\PcDiag.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="PcDiag.Collectors.IntegrationTests" />
+  </ItemGroup>
+</Project>

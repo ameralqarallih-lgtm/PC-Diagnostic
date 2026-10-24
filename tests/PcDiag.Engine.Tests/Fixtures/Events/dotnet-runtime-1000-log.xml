@@ -1,0 +1,11 @@
+﻿<Event xmlns='http://schemas.microsoft.com/win/2004/08/events/event'><System><Provider Name='.NET Runtime'/><EventID Qualifiers='0'>1000</EventID><Version>0</Version><Level>3</Level><Task>0</Task><Opcode>0</Opcode><Keywords>0x80000000000000</Keywords><TimeCreated SystemTime='2026-09-28T05:11:58.5216015Z'/><EventRecordID>156399</EventRecordID><Correlation/><Execution ProcessID='5588' ThreadID='0'/><Channel>Application</Channel><Computer>TEST-PC</Computer><Security/></System><EventData><Data>Category: Microsoft.AspNetCore.HttpsPolicy.HttpsRedirectionMiddleware
+EventId: 3
+SpanId: 72ee31e79ed13557
+TraceId: 3f0f72dd572c93de97ae369af86ea9a1
+ParentId: 0000000000000000
+ConnectionId: 0HNOT3S2P7EH7
+RequestId: 0HNOT3S2P7EH7:00000001
+RequestPath: /razercortexhub/negotiate
+
+Failed to determine the https port for redirect.
+</Data></EventData></Event>

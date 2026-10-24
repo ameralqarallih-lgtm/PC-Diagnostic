@@ -1,0 +1,74 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- Non-elevated loopback web host: serves the React UI, the REST API and (later) the SignalR live feed. -->
+  <PropertyGroup>
+    <TargetFramework>$(PcDiagTfm)</TargetFramework>
+    <AssemblyName>PcDiag.Web</AssemblyName>
+    <ApplicationIcon>..\PcDiag.Agent\app.ico</ApplicationIcon>
+    <!-- The UI build output is copied by the targets below; don't let the Web SDK glob it. -->
+    <EnableDefaultContentItems>false</EnableDefaultContentItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="appsettings*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PcDiag.Engine\PcDiag.Engine.csproj" />
+    <ProjectReference Include="..\PcDiag.Hosting\PcDiag.Hosting.csproj" />
+    <ProjectReference Include="..\PcDiag.Storage.Files\PcDiag.Storage.Files.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The companion app (android/build.ps1), served at /app/pcdiagnostic.apk when access from other devices is on. -->
+    <Content Include="..\..\android\dist\pcdiagnostic.apk" Condition="Exists('..\..\android\dist\pcdiagnostic.apk')"
+             Link="app\pcdiagnostic.apk" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- DPAPI for the LAN certificate's private key (Windows only; LAN access is not offered elsewhere). -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="PcDiag.Web.Tests" />
+  </ItemGroup>
+
+  <!--
+    Web UI build integration (web/ → wwwroot).
+    Runs `npm ci` when node_modules is missing and `npm run build` when UI sources changed.
+    Skip with -p:SkipWebBuild=true (e.g. CI jobs without Node.js); the host then serves a "UI not built" page.
+  -->
+  <PropertyGroup>
+    <WebUiDir>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)..\..\web'))</WebUiDir>
+    <WebUiDist>$(WebUiDir)dist\</WebUiDist>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <WebUiSource Include="$(WebUiDir)src\**\*;$(WebUiDir)public\**\*;$(WebUiDir)index.html;$(WebUiDir)package.json;$(WebUiDir)package-lock.json;$(WebUiDir)vite.config.ts;$(WebUiDir)tsconfig*.json" />
+  </ItemGroup>
+
+  <Target Name="WebUiNpmInstall" Condition="'$(SkipWebBuild)' != 'true' And !Exists('$(WebUiDir)node_modules')">
+    <Message Importance="high" Text="Installing web UI dependencies (npm ci)..." />
+    <Exec Command="npm ci --no-audit --no-fund" WorkingDirectory="$(WebUiDir)" />
+  </Target>
+
+  <Target Name="WebUiBuild" BeforeTargets="Build" DependsOnTargets="WebUiNpmInstall" Condition="'$(SkipWebBuild)' != 'true'"
+          Inputs="@(WebUiSource)" Outputs="$(WebUiDist)index.html">
+    <Message Importance="high" Text="Building web UI (npm run build)..." />
+    <Exec Command="npm run build" WorkingDirectory="$(WebUiDir)" />
+  </Target>
+
+  <Target Name="WebUiCopyToOutput" AfterTargets="Build" Condition="Exists('$(WebUiDist)index.html')">
+    <ItemGroup>
+      <WebUiFile Include="$(WebUiDist)**\*" />
+    </ItemGroup>
+    <RemoveDir Directories="$(OutDir)wwwroot" />
+    <Copy SourceFiles="@(WebUiFile)" DestinationFiles="@(WebUiFile->'$(OutDir)wwwroot\%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
+
+  <Target Name="WebUiCopyToPublish" AfterTargets="Publish" Condition="Exists('$(WebUiDist)index.html')">
+    <ItemGroup>
+      <WebUiFile Include="$(WebUiDist)**\*" />
+    </ItemGroup>
+    <RemoveDir Directories="$(PublishDir)wwwroot" />
+    <Copy SourceFiles="@(WebUiFile)" DestinationFiles="@(WebUiFile->'$(PublishDir)wwwroot\%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
+</Project>

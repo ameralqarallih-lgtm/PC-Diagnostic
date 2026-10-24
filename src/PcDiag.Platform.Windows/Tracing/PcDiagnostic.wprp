@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  PC Diagnostic's Enhanced-mode flight recorder (wpr.exe -start PcDiagnostic.wprp!PcDiagnostic.Light).
+
+  The providers and keywords are those of Windows' built-in GPU.Light and DesktopComposition.Light profiles (exported
+  with wpr -exportprofile), with three changes for an always-on background recorder:
+    * a fixed memory cap: 256 MB for kernel events + 128 MB for the GPU and composition events. The built-in profiles
+      size their buffers as a share of RAM (about 3.9 GB each on a 64 GB PC, measured), so three of them pinned
+      gigabytes of memory and a save wrote a 9 GB file;
+    * no stack walks (they multiply the event volume);
+    * the GPU state is captured again when saving, because the circular buffers drop the one taken at start.
+  How much time the buffers cover depends on how busy the PC is: from tens of seconds under full load to minutes.
+  Saved traces are compressed.
+-->
+<WindowsPerformanceRecorder Version="1.0" Author="PC Diagnostic" Comments="Enhanced mode flight recorder">
+  <Profiles>
+    <SystemCollector Id="PcDiag_SystemCollector" Name="PcDiagnostic System Collector">
+      <BufferSize Value="1024" />
+      <Buffers Value="256" />
+    </SystemCollector>
+    <EventCollector Id="PcDiag_EventCollector" Name="PcDiagnostic Event Collector">
+      <BufferSize Value="1024" />
+      <Buffers Value="128" />
+    </EventCollector>
+
+    <SystemProvider Id="PcDiag_SystemProvider">
+      <Keywords>
+        <Keyword Value="CpuConfig" />
+        <Keyword Value="CSwitch" />
+        <Keyword Value="DiskIO" />
+        <Keyword Value="DPC" />
+        <Keyword Value="HardFaults" />
+        <Keyword Value="Interrupt" />
+        <Keyword Value="Loader" />
+        <Keyword Value="MemoryInfo" />
+        <Keyword Value="Power" />
+        <Keyword Value="ProcessThread" />
+        <Keyword Value="ReadyThread" />
+        <Keyword Value="SampledProfile" />
+      </Keywords>
+    </SystemProvider>
+
+    <!-- Microsoft-Windows-DxgKrnl: GPU scheduling, presents, VSync, resets (GPU.Light keywords; no stacks). -->
+    <EventProvider Id="PcDiag_DxgKrnl" Name="802ec45a-1e99-4b83-9920-87c98277ba9d" NonPagedMemory="true" Level="5" Strict="true">
+      <Keywords>
+        <Keyword Value="0x0000000000000277" />
+      </Keywords>
+      <CaptureStateOnStart Timeout="30">
+        <Keyword Value="0x0000000000000277" />
+      </CaptureStateOnStart>
+      <CaptureStateOnSave Timeout="30">
+        <Keyword Value="0x0000000000000277" />
+      </CaptureStateOnSave>
+    </EventProvider>
+    <!-- Desktop composition (DesktopComposition.Light). -->
+    <EventProvider Id="PcDiag_9e9bba3c" Name="9e9bba3c-2e38-40cb-99f4-9e8281425164" NonPagedMemory="true" Level="6">
+      <Keywords>
+        <Keyword Value="0x000000000001ffff" />
+      </Keywords>
+    </EventProvider>
+    <EventProvider Id="PcDiag_8c9dd1ad" Name="8c9dd1ad-e6e5-4b07-b455-684a9d879900" NonPagedMemory="true" Level="6">
+      <Keywords>
+        <Keyword Value="0x000000000000ffff" />
+      </Keywords>
+    </EventProvider>
+    <EventProvider Id="PcDiag_c44219d0" Name="c44219d0-f344-11df-a5e2-b307dfd72085" NonPagedMemory="true">
+      <Keywords>
+        <Keyword Value="0x0000000000000004" />
+      </Keywords>
+    </EventProvider>
+    <EventProvider Id="PcDiag_8c416c79" Name="8c416c79-d49b-4f01-a467-e56d3aa8234c" NonPagedMemory="true">
+      <Keywords>
+        <Keyword Value="0x00000000042e3000" />
+      </Keywords>
+    </EventProvider>
+    <!-- Common to GPU.Light and DesktopComposition.Light. -->
+    <EventProvider Id="PcDiag_36b6f488" Name="36b6f488-aad7-48c2-afe3-d4ec2c8b46fa" NonPagedMemory="true">
+      <Keywords>
+        <Keyword Value="0x0000000000010000" />
+      </Keywords>
+    </EventProvider>
+    <EventProvider Id="PcDiag_b7a19fcd" Name="b7a19fcd-15ba-41ba-a3d7-dc352d5f79ba" NonPagedMemory="true" Strict="true" />
+    <EventProvider Id="PcDiag_b675ec37" Name="b675ec37-bdb6-4648-bc92-f3fdc74d3ca2" NonPagedMemory="true" Level="15">
+      <Keywords>
+        <Keyword Value="0x0000000000000040" />
+      </Keywords>
+    </EventProvider>
+    <EventProvider Id="PcDiag_d49918cf" Name="d49918cf-9489-4bf1-9d7b-014d864cf71f" NonPagedMemory="true" />
+    <EventProvider Id="PcDiag_e6835967" Name="e6835967-e0d2-41fb-bcec-58387404e25a" NonPagedMemory="true">
+      <Keywords>
+        <Keyword Value="0x0000000000000001" />
+      </Keywords>
+    </EventProvider>
+    <EventProvider Id="PcDiag_65cd4c8a" Name="65cd4c8a-0848-4583-92a0-31c0fbaf00c0" NonPagedMemory="true">
+      <Keywords>
+        <Keyword Value="0x000000000000002f" />
+      </Keywords>
+    </EventProvider>
+
+    <Profile Id="PcDiagnostic.Light.Memory" Name="PcDiagnostic" DetailLevel="Light" LoggingMode="Memory"
+             Description="PC Diagnostic flight recorder: CPU scheduling, disk, GPU and desktop composition, capped at 384 MB">
+      <Collectors>
+        <SystemCollectorId Value="PcDiag_SystemCollector">
+          <SystemProviderId Value="PcDiag_SystemProvider" />
+        </SystemCollectorId>
+        <EventCollectorId Value="PcDiag_EventCollector">
+          <EventProviders>
+            <EventProviderId Value="PcDiag_DxgKrnl" />
+            <EventProviderId Value="PcDiag_9e9bba3c" />
+            <EventProviderId Value="PcDiag_8c9dd1ad" />
+            <EventProviderId Value="PcDiag_c44219d0" />
+            <EventProviderId Value="PcDiag_8c416c79" />
+            <EventProviderId Value="PcDiag_36b6f488" />
+            <EventProviderId Value="PcDiag_b7a19fcd" />
+            <EventProviderId Value="PcDiag_b675ec37" />
+            <EventProviderId Value="PcDiag_d49918cf" />
+            <EventProviderId Value="PcDiag_e6835967" />
+            <EventProviderId Value="PcDiag_65cd4c8a" />
+          </EventProviders>
+        </EventCollectorId>
+      </Collectors>
+      <TraceMergeProperties>
+        <TraceMergeProperty Id="PcDiag_Merge" Name="PcDiag_Merge">
+          <DeletePreMergedTraceFiles Value="true" />
+          <FileCompression Value="true" />
+          <InjectOnly Value="false" />
+          <SkipMerge Value="false" />
+          <CustomEvents>
+            <CustomEvent Value="ImageId" />
+            <CustomEvent Value="BuildInfo" />
+            <CustomEvent Value="VolumeMapping" />
+            <CustomEvent Value="EventMetadata" />
+            <CustomEvent Value="PerfTrackMetadata" />
+            <CustomEvent Value="NetworkInterface" />
+          </CustomEvents>
+        </TraceMergeProperty>
+      </TraceMergeProperties>
+    </Profile>
+
+    <!-- WPR requires a file-mode variant of every profile; the recorder only uses the memory one. -->
+    <Profile Id="PcDiagnostic.Light.File" Name="PcDiagnostic" DetailLevel="Light" LoggingMode="File" Base="PcDiagnostic.Light.Memory"
+             Description="PC Diagnostic flight recorder (file mode)" />
+  </Profiles>
+</WindowsPerformanceRecorder>

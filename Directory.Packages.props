@@ -1,0 +1,35 @@
+<Project>
+  <!-- Central package versions. Licensing policy: docs/ARCHITECTURE.md §2a. -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup Label="Runtime">
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.25.3" />                           <!-- Apache-2.0 (S3-compatible file storage locations) -->
+    <PackageVersion Include="LibreHardwareMonitorLib" Version="0.9.6" />                <!-- MPL-2.0 (unmodified; see ARCHITECTURE 2a) -->
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />                 <!-- MIT -->
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" /> <!-- MIT -->
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.12" />          <!-- MIT -->
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.12" /> <!-- MIT -->
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" /> <!-- MIT -->
+    <PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.12" />          <!-- MIT -->
+    <PackageVersion Include="Microsoft.Win32.SystemEvents" Version="10.0.12" />         <!-- MIT -->
+    <PackageVersion Include="System.Diagnostics.EventLog" Version="10.0.12" />          <!-- MIT -->
+    <PackageVersion Include="System.Management" Version="10.0.12" />
+    <PackageVersion Include="System.IO.Ports" Version="10.0.3" />                       <!-- MIT (serial sensors, driver packages) -->                     <!-- MIT -->
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.12" /> <!-- MIT -->
+    <PackageVersion Include="Serilog.Extensions.Hosting" Version="10.0.0" />             <!-- Apache-2.0 -->
+    <PackageVersion Include="Serilog.Formatting.Compact" Version="3.0.0" />              <!-- Apache-2.0 -->
+    <PackageVersion Include="Serilog.Sinks.Console" Version="6.1.1" />                   <!-- Apache-2.0 -->
+    <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />                      <!-- Apache-2.0 -->
+  </ItemGroup>
+  <ItemGroup Label="Test">
+    <PackageVersion Include="coverlet.collector" Version="6.0.4" />                      <!-- MIT -->
+    <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />      <!-- MIT -->
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.10.0" /> <!-- MIT -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />                <!-- MIT -->
+    <PackageVersion Include="NSubstitute" Version="6.2.0" />                             <!-- BSD-3 -->
+    <PackageVersion Include="Shouldly" Version="4.3.0" />                                <!-- BSD-3 -->
+    <PackageVersion Include="xunit" Version="2.9.3" />                                   <!-- Apache-2.0 -->
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />               <!-- Apache-2.0 -->
+  </ItemGroup>
+</Project>

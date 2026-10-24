@@ -1,0 +1,15 @@
+<Project>
+  <!--
+    Release builds bundle the .NET runtime (installer\build.ps1 publishes self-contained). The SDK would bundle the
+    runtime patch it shipped with; PcDiagRuntimePatch (e.g. 10.0.12, set by the installer build from the official
+    release metadata) makes all three shared frameworks use that patch instead, so the installer carries the
+    current security fixes without updating the SDK on the build machine.
+  -->
+  <Target Name="PcDiagUseRuntimePatch" BeforeTargets="ProcessFrameworkReferences" Condition="'$(PcDiagRuntimePatch)' != ''">
+    <ItemGroup>
+      <KnownFrameworkReference Condition="'%(KnownFrameworkReference.TargetFramework)' == 'net$(_TargetFrameworkVersionWithoutV)'">
+        <LatestRuntimeFrameworkVersion>$(PcDiagRuntimePatch)</LatestRuntimeFrameworkVersion>
+      </KnownFrameworkReference>
+    </ItemGroup>
+  </Target>
+</Project>

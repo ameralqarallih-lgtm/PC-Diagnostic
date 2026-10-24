@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Screens that are not Windows monitors (USB LCD panels): the driver contract, driver packages and the protocol
+       families a package can name without code. No Windows dependencies; the screen host supplies the USB access. -->
+  <PropertyGroup>
+    <TargetFramework>$(PcDiagTfm)</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="BuiltIn\*.json" LogicalName="PcDiag.Screens.Sdk.BuiltIn.%(Filename)%(Extension)" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="PcDiag.Screens.Tests" />
+  </ItemGroup>
+</Project>
