@@ -30,4 +30,40 @@ public class CostMeterTests
 
         CostMeter.Take().ContainsKey("test.busy").ShouldBeFalse();
     }
+
+    [Fact]
+    public void A_part_measured_inside_another_is_counted_once()
+    {
+        static double Spin(int n)
+        {
+            var x = 0.0;
+            for (var i = 0; i < n; i++)
+            {
+                x += Math.Sqrt(i);
+            }
+
+            return x;
+        }
+
+        long whole;
+        _ = CostMeter.Take();
+        var start = CostMeter.ProcessCycles();
+        using (CostMeter.Measure("test.outer"))
+        {
+            Spin(200_000).ShouldBeGreaterThan(0);
+            using (CostMeter.Measure("test.inner"))
+            {
+                Spin(4_000_000).ShouldBeGreaterThan(0);
+            }
+        }
+
+        whole = CostMeter.ProcessCycles() - start;
+        var taken = CostMeter.Take();
+        if (OperatingSystem.IsWindows())
+        {
+            // The outer part counts only its own (small) work; together they are no more than the thread spent.
+            taken["test.inner"].ShouldBeGreaterThan(taken["test.outer"] * 5);
+            (taken["test.inner"] + taken["test.outer"]).ShouldBeLessThanOrEqualTo(whole);
+        }
+    }
 }

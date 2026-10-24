@@ -14,8 +14,16 @@ public static class CostMeter
     private static readonly ConcurrentDictionary<string, long> Cycles = new(StringComparer.Ordinal);
     private static readonly bool Counting = OperatingSystem.IsWindows();
 
-    /// <summary>Counts the current thread's cycles until the scope is disposed (on the same thread), for <paramref name="part"/>.</summary>
-    public static Scope Measure(string part) => new(part, Counting ? ThreadCycles() : 0);
+    // The cycles of the parts that ended on this thread so far: a part counts only its own work, not the parts measured
+    // inside it (the USB screen's drawing inside the motion timer's tick was counted twice).
+    [ThreadStatic]
+    private static long t_ended;
+
+    /// <summary>
+    /// Counts the current thread's cycles until the scope is disposed (on the same thread), for <paramref name="part"/>:
+    /// its own cycles, without those of the parts measured inside it.
+    /// </summary>
+    public static Scope Measure(string part) => new(part, Counting ? ThreadCycles() : 0, t_ended);
 
     /// <summary>The cycles counted per part since the last call, and the count started again.</summary>
     public static IReadOnlyDictionary<string, long> Take()
@@ -54,19 +62,23 @@ public static class CostMeter
     {
         private readonly string _part;
         private readonly long _start;
+        private readonly long _ended;
 
-        internal Scope(string part, long start)
+        internal Scope(string part, long start, long ended)
         {
             _part = part;
             _start = start;
+            _ended = ended;
         }
 
-        /// <summary>Adds the cycles spent since it began to its part.</summary>
+        /// <summary>Adds the cycles spent since it began, less those of the parts measured inside it, to its part.</summary>
         public void Dispose()
         {
             if (Counting && _part is not null)
             {
-                Add(_part, ThreadCycles() - _start);
+                var spent = ThreadCycles() - _start;
+                Add(_part, spent - (t_ended - _ended));
+                t_ended = _ended + spent;
             }
         }
     }

@@ -127,6 +127,7 @@ describe('History page', () => {
         processes: [
           { procKey: 1, pid: 100, name: 'chrome.exe', path: null, cpuPercent: 12, workingSetBytes: 1e9, privateBytes: 8e8, ioReadBytesPerSec: 0, ioWriteBytesPerSec: 0, gpuPercent: null, gpuMemoryBytes: null, threads: 40, handles: 900, state: 'Running', startTs: at - 1000, measured: true },
           { procKey: 2, pid: 200, name: 'notepad.exe', path: 'C:\\Windows\\notepad.exe', cpuPercent: null, workingSetBytes: null, privateBytes: null, ioReadBytesPerSec: null, ioWriteBytesPerSec: null, gpuPercent: null, gpuMemoryBytes: null, threads: null, handles: null, state: 'Running', startTs: at - 5000, measured: false },
+          { procKey: 4, pid: 4400, name: 'docker.exe', path: null, cpuPercent: null, workingSetBytes: 9e6, privateBytes: 8e6, ioReadBytesPerSec: 0, ioWriteBytesPerSec: 0, gpuPercent: null, gpuMemoryBytes: null, threads: 4, handles: 90, state: 'Running', startTs: at - 500, measured: true },
           { procKey: 3, pid: 1300, name: 'svchost.exe', path: null, cpuPercent: 0, workingSetBytes: 9e6, privateBytes: 4e6, ioReadBytesPerSec: 0, ioWriteBytesPerSec: 0, gpuPercent: null, gpuMemoryBytes: null, threads: 9, handles: 300, state: 'Running', startTs: at - 9e6, measured: true, figuresTs: at - 20_000 },
         ],
         services: [
@@ -143,17 +144,19 @@ describe('History page', () => {
     expect(screen.getByText('chrome.exe')).toBeInTheDocument();
     expect(screen.getByText('running · no figures stored')).toBeInTheDocument();
     expect(screen.getByText('Intel Core Ultra 9 285K / CPU Package')).toBeInTheDocument();
-    expect(screen.getByText(/3 processes were running; 2 with figures/)).toBeInTheDocument();
+    expect(screen.getByText(/4 processes were running; 3 with figures/)).toBeInTheDocument();
 
     // Figures from the full process list carry their time.
     expect(screen.getByText(/as of/)).toBeInTheDocument();
+    // A process seen in one sample has no CPU use yet: it says so (not "Unavailable").
+    expect(screen.getByText('Just started')).toHaveAttribute('title', expect.stringContaining('Seen in one sample only'));
 
     // The moment's sections, and the page's chart and events, are a click away on its bar.
     const bar = screen.getByRole('navigation', { name: 'Sections of this moment' });
-    expect(within(bar).getAllByRole('button').map((b) => b.textContent)).toEqual(['Values', 'Processes (3)', 'Services (2 running)', 'Chart', 'Events']);
+    expect(within(bar).getAllByRole('button').map((b) => b.textContent)).toEqual(['Values', 'Processes (4)', 'Services (2 running)', 'Chart', 'Events']);
     await userEvent.click(within(bar).getByRole('button', { name: 'Services (2 running)' }));
     expect(screen.getByRole('searchbox', { name: 'Filter services' })).toBeInTheDocument();
-    await userEvent.click(within(bar).getByRole('button', { name: 'Processes (3)' }));
+    await userEvent.click(within(bar).getByRole('button', { name: 'Processes (4)' }));
     expect(screen.getByRole('searchbox', { name: 'Filter processes' })).toBeInTheDocument();
 
     // A process's services lead to the Services tab, and a service back to its process.

@@ -80,7 +80,7 @@ export function ProcessTable({ processes, filterable = false, filter: controlled
       cell: (p) => <ProcessCell process={p} services={services?.get(p.procKey) ?? []} onShowServices={onShowServices} />,
     },
     { id: 'pid', header: 'PID', value: (p) => p.pid, groupable: false, align: 'right', className: 'font-mono text-xs text-muted' },
-    { id: 'cpu', header: 'CPU', value: (p) => (measured(p) ? p.cpuPercent : null), cell: (p) => (measured(p) ? formatPercent(p.cpuPercent, 1) : '—'), groupable: false, align: 'right', firstDesc: true },
+    { id: 'cpu', header: 'CPU', value: (p) => (measured(p) ? p.cpuPercent : null), cell: (p) => (!measured(p) ? '—' : p.cpuPercent == null ? <JustStarted /> : formatPercent(p.cpuPercent, 1)), groupable: false, align: 'right', firstDesc: true },
     {
       id: 'memory',
       header: 'Memory',
@@ -170,6 +170,18 @@ export function ProcessTable({ processes, filterable = false, filter: controlled
         ) : undefined
       }
     />
+  );
+}
+
+/**
+ * A process with figures but no CPU use: seen in one sample only. CPU use is the CPU time used between two samples (2 s
+ * apart), so a process has none in the sample it first appears in, and one that runs for less than that never gets one.
+ */
+function JustStarted() {
+  return (
+    <span className="text-xs text-muted" title="Seen in one sample only. CPU use is measured between two samples (2 seconds apart), so a process has none in the sample it first appears in; a program that runs for less than that never gets one.">
+      Just started
+    </span>
   );
 }
 

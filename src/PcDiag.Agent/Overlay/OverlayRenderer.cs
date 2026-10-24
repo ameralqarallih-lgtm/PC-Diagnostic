@@ -1002,6 +1002,14 @@ internal static partial class OverlayRenderer
                     }
                 }
             }
+            else if (Rectangle.Round(ImageBox(box, picture.Width, picture.Height, style, m)) is var at
+                && at.Size == source.Size && blurred is null && !style.ImageGray && style.ImageOpacity >= 100)
+            {
+                // At its own size with nothing to change (no opacity, grey or blur): copied as it is. GDI+ draws through
+                // ImageAttributes about 25 times slower even when the matrix changes nothing (20 ms against 0.8 ms for
+                // a 1920 x 480 frame), and an animated background on a USB screen is drawn 20 or 30 times a second.
+                g.DrawImageUnscaled(source, at.X, at.Y);
+            }
             else
             {
                 g.DrawImage(source, Rectangle.Round(ImageBox(box, picture.Width, picture.Height, style, m)), 0, 0, source.Width, source.Height, GraphicsUnit.Pixel, attributes);
