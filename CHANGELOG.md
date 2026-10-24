@@ -3,6 +3,20 @@
 All notable changes to PC Diagnostic & Incident Recorder. Each release's installer is on the
 [releases page](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases).
 
+## [1.0.4] - 2026-10-25
+
+### Fixed
+- **The recorder uses less CPU while an animated background plays** (on monitors and USB screens): what lies over the
+  picture (pattern, sheen, accent edge) is drawn once into a kept layer instead of on every frame, and a picture at its
+  own size is copied pixel for pixel. On a 1920 x 480 USB screen at 20 frames a second a motion frame takes 7.9 ms
+  instead of 16.5 and a full redraw 21 ms instead of 33; the recorder went from 4.1% to 3.4% of the PC. Recording
+  itself costs about 2 s of CPU a minute; the rest follows the screen's motion frame rate (its setting).
+  ([#6](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/6))
+- **The Recorder cost tab adds up**: a part measured inside another (a USB screen's drawing inside the motion timer)
+  was counted in both.
+- **A process seen in only one sample shows "Just started"**, with why, instead of "Unavailable": CPU use is measured
+  between two samples, 2 seconds apart. ([#7](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/7))
+
 ## [1.0.2] - 2026-10-25
 
 ### Changed
@@ -33,12 +47,7 @@ The first public release: free and open source under the GPL-3.0, every feature 
 - On a GeForce RTX 50 series GPU the hotspot temperature shows as "Not available on this GPU" (NVIDIA removed the
   sensor) instead of counting as an unavailable reading. ([#1](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/1))
 
-## Known issues
-- The recorder uses about 4% CPU while the dashboard is open, double its 2% budget.
-  ([#6](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/6))
-- A process seen in only one sample shows CPU "Unavailable" (correct, but it reads like a fault).
-  ([#7](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/7))
-
+[1.0.4]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.4
 [1.0.2]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.2
 [1.0.1]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/compare/v1.0.0...v1.0.2
 [1.0.0]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.0
