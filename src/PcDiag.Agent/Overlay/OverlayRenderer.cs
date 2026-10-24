@@ -364,6 +364,10 @@ internal static partial class OverlayRenderer
     /// </summary>
     internal sealed class MotionLayers(Bitmap back, Bitmap front, RectangleF box, float radius, OverlayStyle style, float s, AnimatedPicture? animation = null, Metrics? metrics = null) : IDisposable
     {
+        // What lies over an animated picture (pattern, sheen, accent edge): it never moves, so it is drawn once and laid
+        // over each frame. Drawn again every frame, a hexagon pattern alone cost 10 ms of a 1920 x 480 frame's 16.
+        private Bitmap? _above;
+
         public Size Size => back.Size;
 
         /// <summary>Draws the panel at a moment into a picture of its size (cleared first).</summary>
@@ -378,7 +382,12 @@ internal static partial class OverlayRenderer
                 // The animated picture's frame at this moment, with what lies over it (pattern, sheen, accent edge).
                 if (animation is not null && metrics is not null)
                 {
-                    DrawOverlays(g, shape, box, style, metrics, animation.FrameAt(seconds), fast: true);
+                    if (animation.FrameAt(seconds) is { } picture)
+                    {
+                        DrawImage(g, shape, box, picture, style, metrics, fast: true);
+                    }
+
+                    g.DrawImage(_above ??= KeptAbove(back.Size, shape, box, style, metrics), new Rectangle(0, 0, back.Width, back.Height));
                 }
 
                 DrawMotion(g, shape, box, style, s, seconds);
@@ -401,6 +410,7 @@ internal static partial class OverlayRenderer
         {
             back.Dispose();
             front.Dispose();
+            _above?.Dispose();
         }
     }
 
@@ -830,6 +840,53 @@ internal static partial class OverlayRenderer
     private static readonly LinkedList<(BackgroundKey Key, Bitmap Picture)> Backgrounds = new();
     private const long BackgroundsBudget = 48L * 1024 * 1024;
 
+    // The layers over animated pictures (pattern, sheen, accent edge) kept by look, scale, size and box: the 8 last used.
+    private static readonly LinkedList<(BackgroundKey Key, Bitmap Layer)> Aboves = new();
+    private static readonly Lock AbovesLock = new();
+
+    /// <summary>
+    /// What lies over an animated picture (its pattern, sheen and accent edge) on a see-through layer of the panel's size:
+    /// a copy of the one kept for the same look, scale, size and box, drawn once when there is none (a refresh and every
+    /// step of a gliding value make new layers, and a hexagon pattern takes 10 ms to draw on a 1920 x 480 panel).
+    /// </summary>
+    private static Bitmap KeptAbove(Size size, GraphicsPath shape, RectangleF box, OverlayStyle style, Metrics m)
+    {
+        var key = new BackgroundKey(style, m.S, size, box, true);
+        lock (AbovesLock)
+        {
+            for (var node = Aboves.First; node is not null; node = node.Next)
+            {
+                if (node.Value.Key.Equals(key))
+                {
+                    Aboves.Remove(node);
+                    Aboves.AddFirst(node);
+                    return node.Value.Layer.Clone(new Rectangle(Point.Empty, size), System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+                }
+            }
+        }
+
+        var layer = new Bitmap(size.Width, size.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+        using (var g = Graphics.FromImage(layer))
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.CompositingQuality = CompositingQuality.AssumeLinear;
+            g.Clear(Color.Transparent);
+            DrawOverlays(g, shape, box, style, m, null, fast: true);
+        }
+
+        lock (AbovesLock)
+        {
+            Aboves.AddFirst((key, layer.Clone(new Rectangle(Point.Empty, size), System.Drawing.Imaging.PixelFormat.Format32bppPArgb)));
+            while (Aboves.Count > 8)
+            {
+                Aboves.Last!.Value.Layer.Dispose();
+                Aboves.RemoveLast();
+            }
+        }
+
+        return layer;
+    }
+
     /// <summary>
     /// Draws the background, from the copy kept for the same look, size and scale when there is one (its shadow alone is
     /// several blurred passes); the 16 last used are kept, within 48 MB. A picture not loaded yet is not kept.
@@ -1005,10 +1062,11 @@ internal static partial class OverlayRenderer
             else if (Rectangle.Round(ImageBox(box, picture.Width, picture.Height, style, m)) is var at
                 && at.Size == source.Size && blurred is null && !style.ImageGray && style.ImageOpacity >= 100)
             {
-                // At its own size with nothing to change (no opacity, grey or blur): copied as it is. GDI+ draws through
+                // At its own size with nothing to change (no opacity, grey or blur): copied pixel for pixel (a rectangle
+                // of its own size, not DrawImageUnscaled, which follows the picture's DPI). GDI+ draws through
                 // ImageAttributes about 25 times slower even when the matrix changes nothing (20 ms against 0.8 ms for
                 // a 1920 x 480 frame), and an animated background on a USB screen is drawn 20 or 30 times a second.
-                g.DrawImageUnscaled(source, at.X, at.Y);
+                g.DrawImage(source, at);
             }
             else
             {
