@@ -32,6 +32,12 @@ const KINDS: Record<StorageKindId, { name: string; color: string; kept: (r: Stor
   logs: { name: 'Logs', color: '#fbbf24', kept: () => 'The newest 14 files of each program, automatically', automatic: true },
   diagnostics: { name: 'Diagnoses', color: '#34d399', kept: () => 'The 20 most recent, automatically', automatic: true },
   reports: { name: 'Problem reports', color: '#fb923c', kept: () => 'Until sent', automatic: true },
+  characters: {
+    name: 'Character generator (its AI models, its Python and the characters made)',
+    color: '#22d3ee',
+    kept: () => 'Until you remove them; not counted in the space limit',
+    automatic: false,
+  },
   other: { name: 'Settings and layouts', color: '#94a3b8', kept: () => 'Always', automatic: false },
 };
 
@@ -389,13 +395,21 @@ export function StoragePage() {
 /** "680 MB of 10 GB allowed", with a bar of how much of the limit is used. */
 function UsageSummary({ data }: { data: StorageResponse }) {
   const limit = data.limits.dataLimitGb * GB;
-  const share = limit > 0 ? Math.min(1, data.totalBytes / limit) : null;
+  // The character generator's models and creations are not recordings: the limit does not count them.
+  const counted = data.limitedBytes ?? data.totalBytes;
+  const notCounted = data.totalBytes - counted;
+  const share = limit > 0 ? Math.min(1, counted / limit) : null;
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex flex-wrap items-baseline gap-x-2">
-        <span className="text-3xl font-semibold tabular-nums">{formatBytes(data.totalBytes)}</span>
+        <span className="text-3xl font-semibold tabular-nums">{formatBytes(counted)}</span>
         <span className="text-sm text-muted">{limit > 0 ? `of ${data.limits.dataLimitGb} GB allowed` : 'used, with no space limit'}</span>
       </div>
+      {notCounted > 0 && (
+        <p className="text-xs text-muted">
+          Plus <span className="tabular-nums">{formatBytes(notCounted)}</span> for the character generator (its AI models and the characters made), which the limit does not count.
+        </p>
+      )}
       {share !== null && (
         <div
           role="meter"

@@ -70,6 +70,27 @@ public sealed class StorageManagerTests : IDisposable
     }
 
     [Fact]
+    public async Task The_character_generators_models_do_not_count_against_the_space_limit()
+    {
+        // The dev PC: 55 GB of generator models against a 10 GB limit held full detail at its 2-hour floor for nothing.
+        var telemetry = Telemetry(2 * MB, TimeSpan.FromHours(24));
+        var models = Path.Combine(_root, "characters", "kit", "hf", "model.safetensors");
+        Directory.CreateDirectory(Path.GetDirectoryName(models)!);
+        await using (var file = File.Create(models))
+        {
+            file.SetLength(20 * MB);
+        }
+
+        var manager = Manager(new StorageOptions { DataLimitGb = 10, KeepFreeGb = 0 }, telemetry);
+        await manager.PassAsync(manual: false, compact: false, CancellationToken.None);
+
+        telemetry.FullDetailFrom.ShouldBe(Now.AddHours(-24)); // nothing shortened
+        manager.State.Condition.ShouldBe(StorageCondition.Normal);
+        manager.State.UsedBytes.ShouldBe(StorageMeter.Measure(_paths).LimitedBytes);
+        StorageMeter.Measure(_paths).Kinds.Single(k => k.Id == "characters").Bytes.ShouldBe(20 * MB);
+    }
+
+    [Fact]
     public async Task Over_the_space_limit_full_detail_is_kept_for_a_shorter_time_before_any_incident_goes()
     {
         // 6 MB of full detail over 24 h and 4.5 MB of incidents: 10.5 MB against a 10 MB limit.

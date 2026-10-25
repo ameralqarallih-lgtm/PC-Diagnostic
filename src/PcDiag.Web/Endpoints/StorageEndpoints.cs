@@ -75,6 +75,7 @@ internal static class StorageEndpoints
                 paths.Root,
                 drive,
                 usage.TotalBytes,
+                usage.LimitedBytes,
                 usage.Kinds,
                 incidents,
                 leftovers,
@@ -174,6 +175,7 @@ public sealed record StorageLimitsView(
 /// <param name="Folder">The data folder.</param>
 /// <param name="Drive">Its drive's size and free space.</param>
 /// <param name="TotalBytes">What the data folder uses.</param>
+/// <param name="LimitedBytes">What the space limit counts: the data folder without the character generator's folder.</param>
 /// <param name="Kinds">By kind, largest first.</param>
 /// <param name="Incidents">Every incident with its size, newest first.</param>
 /// <param name="LeftoverBytes">Files of deleted incidents still waiting to be removed.</param>
@@ -186,6 +188,7 @@ public sealed record StorageResponse(
     string Folder,
     DiskSpace? Drive,
     long TotalBytes,
+    long LimitedBytes,
     IReadOnlyList<StorageKindUsage> Kinds,
     IReadOnlyList<StorageIncident> Incidents,
     long LeftoverBytes,

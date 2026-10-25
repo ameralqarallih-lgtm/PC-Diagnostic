@@ -1654,7 +1654,7 @@ export interface StorageState {
   recent: StorageAction[];
 }
 
-export type StorageKindId = 'incidents' | 'telemetry' | 'index' | 'logs' | 'diagnostics' | 'reports' | 'other';
+export type StorageKindId = 'incidents' | 'telemetry' | 'index' | 'logs' | 'diagnostics' | 'reports' | 'characters' | 'other';
 
 export interface StorageKindUsage {
   id: StorageKindId;
@@ -1808,6 +1808,8 @@ export interface StorageResponse {
   folder: string;
   drive: { name: string; totalBytes: number; freeBytes: number } | null;
   totalBytes: number;
+  /** What the space limit counts: without the character generator's models and creations. */
+  limitedBytes: number;
   kinds: StorageKindUsage[];
   incidents: StorageIncident[];
   leftoverBytes: number;

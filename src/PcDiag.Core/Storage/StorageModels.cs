@@ -57,7 +57,7 @@ public static class StorageActionKinds
 /// <param name="Message">What it means for the user (null when normal).</param>
 /// <param name="CheckedAt">The last check of the drive.</param>
 /// <param name="FreeBytes">The drive's free space then.</param>
-/// <param name="UsedBytes">The data folder's size at the last full pass.</param>
+/// <param name="UsedBytes">What the space limit counts (the data folder without the character generator's folder) at the last full pass.</param>
 /// <param name="LastPassAt">The last full pass (limits applied).</param>
 /// <param name="Recent">Recent clean-ups, newest first.</param>
 public sealed record StorageState(
@@ -229,7 +229,7 @@ public static class StorageLimits
 }
 
 /// <summary>What one kind of data uses in the data folder.</summary>
-/// <param name="Id">incidents, telemetry, index, logs, diagnostics, reports or other.</param>
+/// <param name="Id">incidents, telemetry, index, logs, diagnostics, reports, characters or other.</param>
 /// <param name="Bytes">Size on disk.</param>
 /// <param name="Files">Files (for incidents: incidents).</param>
 public sealed record StorageKindUsage(string Id, long Bytes, int Files);
@@ -238,7 +238,18 @@ public sealed record StorageKindUsage(string Id, long Bytes, int Files);
 /// <param name="TotalBytes">The whole data folder.</param>
 /// <param name="Kinds">By kind, largest first.</param>
 /// <param name="IncidentBytes">Each incident folder's size, by incident key.</param>
-public sealed record StorageUsage(long TotalBytes, IReadOnlyList<StorageKindUsage> Kinds, IReadOnlyDictionary<string, long> IncidentBytes);
+public sealed record StorageUsage(long TotalBytes, IReadOnlyList<StorageKindUsage> Kinds, IReadOnlyDictionary<string, long> IncidentBytes)
+{
+    /// <summary>
+    /// Kinds the space limit does not count: the character generator's folder (its AI models, about 55 GB, its own
+    /// Python and the characters made with it) is what the user installed and made, not what the recorder records,
+    /// and no clean-up of recordings can make room for it. Counted, it held recordings at their shortest for nothing.
+    /// </summary>
+    public static readonly IReadOnlySet<string> NotLimited = new HashSet<string>(StringComparer.Ordinal) { "characters" };
+
+    /// <summary>What the space limit counts: everything but <see cref="NotLimited"/>.</summary>
+    public long LimitedBytes => TotalBytes - Kinds.Where(k => NotLimited.Contains(k.Id)).Sum(k => k.Bytes);
+}
 
 /// <summary>Measures the data folder (file sizes only; nothing is opened).</summary>
 public static class StorageMeter
@@ -274,6 +285,7 @@ public static class StorageMeter
             [Path.GetFileName(paths.LogsDirectory)] = "logs",
             [Path.GetFileName(paths.DiagnosticsDirectory)] = "diagnostics",
             [Path.GetFileName(paths.ReportsDirectory)] = "reports",
+            ["characters"] = "characters",
         };
         var telemetry = Path.GetFileName(paths.TelemetryDatabase);
         var index = Path.GetFileName(paths.IncidentIndexDatabase);

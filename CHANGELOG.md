@@ -3,6 +3,15 @@
 All notable changes to PC Diagnostic & Incident Recorder. Each release's installer is on the
 [releases page](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases).
 
+## [1.0.7] - 2026-10-25
+
+### Fixed
+- **The space limit counts only recordings.** It counted the whole data folder, including the character generator's
+  AI models (about 55 GB once downloaded) and its Python. No clean-up of recordings can free that, so with the default
+  10 GB limit the recorder kept History at its shortest (2 hours of full detail, 7 days of summaries) and reported
+  being over the limit because of "pinned or still recording" incidents. The generator's folder is now its own line on
+  the Storage page and the limit leaves it out.
+
 ## [1.0.6] - 2026-10-25
 
 ### Added
@@ -76,6 +85,7 @@ The first public release: free and open source under the GPL-3.0, every feature 
 - On a GeForce RTX 50 series GPU the hotspot temperature shows as "Not available on this GPU" (NVIDIA removed the
   sensor) instead of counting as an unavailable reading. ([#1](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/1))
 
+[1.0.7]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.7
 [1.0.6]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.6
 [1.0.5]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.5
 [1.0.4]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.4

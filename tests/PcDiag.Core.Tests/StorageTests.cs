@@ -49,14 +49,18 @@ public sealed class StorageTests : IDisposable
         Write(@"diagnostics\d1.json", 30);
         Write("settings.json", 20);
         Write(@"launch\ticket", 10);
+        Write(@"characters\kit\hf\model.safetensors", 900);
+        Write(@"characters\generator-python\python.exe", 100);
 
         var usage = StorageMeter.Measure(_paths);
 
-        usage.TotalBytes.ShouldBe(9_610);
+        usage.TotalBytes.ShouldBe(10_610);
+        usage.LimitedBytes.ShouldBe(9_610); // the character generator's folder is not counted by the space limit
         usage.Kinds.Select(k => (k.Id, k.Bytes, k.Files)).ShouldBe(
         [
             ("telemetry", 6100, 3),
             ("incidents", 2750, 2),
+            ("characters", 1000, 2),
             ("logs", 400, 1),
             ("index", 300, 1),
             ("diagnostics", 30, 1),

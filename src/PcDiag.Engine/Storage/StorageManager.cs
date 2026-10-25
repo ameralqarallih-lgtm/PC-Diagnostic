@@ -250,7 +250,8 @@ public sealed partial class StorageManager : BackgroundService, IStorageControl
             var limit = options.DataLimitGb * Unit;
             var keepFree = options.KeepFreeGb * Unit;
             var target = (long)(limit * StorageLimits.LimitTarget);
-            var needForLimit = limit > 0 && measured.TotalBytes > limit ? measured.TotalBytes - target : 0;
+            // The limit counts what the recorder records (not the character generator's models: StorageUsage.NotLimited).
+            var needForLimit = limit > 0 && measured.LimitedBytes > limit ? measured.LimitedBytes - target : 0;
             var needForDrive = 0L;
             string? driveReason = null;
             if (drive is not null)
@@ -285,10 +286,10 @@ public sealed partial class StorageManager : BackgroundService, IStorageControl
                 if (limit > 0)
                 {
                     var usage = StorageMeter.Measure(_paths);
-                    if (usage.TotalBytes > target && needForLimit > 0)
+                    if (usage.LimitedBytes > target && needForLimit > 0)
                     {
                         var incidents = await _inventory.ListAsync(cancellationToken).ConfigureAwait(false);
-                        var (count, bytes, keys) = await RemoveAsync(incidents.Where(i => !i.Pinned && i.Finished), usage, usage.TotalBytes - target, cancellationToken).ConfigureAwait(false);
+                        var (count, bytes, keys) = await RemoveAsync(incidents.Where(i => !i.Pinned && i.Finished), usage, usage.LimitedBytes - target, cancellationToken).ConfigureAwait(false);
                         if (count > 0)
                         {
                             freed += bytes;
@@ -312,8 +313,8 @@ public sealed partial class StorageManager : BackgroundService, IStorageControl
             var after = StorageMeter.Measure(_paths);
             lock (_stateLock)
             {
-                _used = after.TotalBytes;
-                _overLimit = limit > 0 && after.TotalBytes > limit;
+                _used = after.LimitedBytes;
+                _overLimit = limit > 0 && after.LimitedBytes > limit;
                 _lastPass = _time.GetUtcNow();
             }
 
@@ -503,7 +504,7 @@ public sealed partial class StorageManager : BackgroundService, IStorageControl
         if (_overLimit)
         {
             return (StorageCondition.OverLimit,
-                $"PC Diagnostic's data uses {Bytes(_used ?? 0)}, more than the {options.DataLimitGb.ToString(CultureInfo.InvariantCulture)} GB limit, and what is left is pinned or still recording: unpin or delete incidents, or raise the limit.");
+                $"PC Diagnostic's recorded data uses {Bytes(_used ?? 0)}, more than the {options.DataLimitGb.ToString(CultureInfo.InvariantCulture)} GB limit, and what is left is pinned or still recording: unpin or delete incidents, or raise the limit.");
         }
 
         return (StorageCondition.Normal, null);

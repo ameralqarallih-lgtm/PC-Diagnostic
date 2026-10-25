@@ -13,6 +13,7 @@ function storage(overrides: Partial<StorageResponse> = {}): StorageResponse {
     folder: 'C:\\Users\\me\\AppData\\Local\\PcDiagnostic',
     drive: { name: 'C:', totalBytes: 2000 * GB, freeBytes: 400 * GB },
     totalBytes: 680 * MB,
+    limitedBytes: 680 * MB,
     kinds: [
       { id: 'incidents', bytes: 450 * MB, files: 3 },
       { id: 'telemetry', bytes: 220 * MB, files: 3 },
@@ -94,6 +95,21 @@ describe('Storage page', () => {
 
     const limits = screen.getByRole('region', { name: 'Limits' });
     expect(within(limits).getByText('the oldest unpinned incidents, for the space limit only.')).toBeInTheDocument();
+  });
+
+  it('counts the character generator apart from the space limit', async () => {
+    const base = storage();
+    mockApi({
+      'GET /api/v1/status': () => statusResponse(),
+      'GET /api/v1/storage': () => storage({ totalBytes: 680 * MB + 55 * GB, kinds: [{ id: 'characters', bytes: 55 * GB, files: 40 }, ...base.kinds] }),
+    });
+    renderApp('/storage');
+
+    const space = await screen.findByRole('region', { name: 'Space' });
+    expect(within(space).getByText('680.0 MB')).toBeInTheDocument();
+    expect(within(space).getByText(/for the character generator .* which the limit does not count/)).toBeInTheDocument();
+    expect(screen.getByRole('meter', { name: 'Share of the space limit used' })).toHaveAttribute('aria-valuenow', '7');
+    expect(within(screen.getByRole('region', { name: 'What uses the space' })).getByText(/Character generator/)).toBeInTheDocument();
   });
 
   it('deletes the selected incidents after confirming, and cleans up through the recorder', async () => {
