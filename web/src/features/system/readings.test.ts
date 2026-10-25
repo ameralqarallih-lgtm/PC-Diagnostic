@@ -63,8 +63,8 @@ describe('unavailable readings', () => {
       { series: 'gpu.gpu-10de-2c05-1.hotspot_c', availability: 'Unsupported', reason: null, since: NOW },
       { series: 'gpu.gpu-10de-2c05-1.fan_rpm', availability: 'Unsupported', reason: null, since: NOW },
     ] });
-    // The sensor exists (HWMonitor and HWiNFO read it): a missing reading, not one the card cannot have.
-    expect(rows[0]).toMatchObject({ label: 'NVIDIA GeForce RTX 5070 Ti: hotspot temperature', category: 'missing', why: expect.stringContaining('LibreHardwareMonitor'), fix: expect.stringContaining('HWiNFO') });
+    // The sensor exists (the recorder reads it through PawnIO): a missing reading, not one the card cannot have.
+    expect(rows[0]).toMatchObject({ label: 'NVIDIA GeForce RTX 5070 Ti: hotspot temperature', category: 'missing', why: expect.stringContaining('PawnIO'), fix: expect.stringContaining('Repair the installation') });
     expect(rows[1]).toMatchObject({ category: 'missing' });
   });
 });

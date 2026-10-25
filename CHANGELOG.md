@@ -3,14 +3,20 @@
 All notable changes to PC Diagnostic & Incident Recorder. Each release's installer is on the
 [releases page](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases).
 
-## [Unreleased]
+## [1.0.6] - 2026-10-25
+
+### Added
+- **The GeForce RTX 50 series hotspot temperature is recorded.** NVIDIA left it out of its public interfaces (NVAPI,
+  NVML) for Blackwell cards, so the recorder reads it from the GPU's own thermal registers through the PawnIO driver
+  it already installs, as HWMonitor 1.65.1 and HWiNFO do: the hottest of six thermal channels. The reading uses the
+  signed `Nvidia.bin` module from PawnIO.Modules 0.2.11, shipped unmodified (LGPL-2.1, credited in
+  THIRD-PARTY-NOTICES). Other GPUs keep their hotspot from where they had it; the module only answers for RTX 50
+  series chips. ([#1](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/1))
 
 ### Fixed
-- **The RTX 50 series hotspot is shown as an unavailable reading again, with the real reason.** 1.0.0 said NVIDIA had
-  removed the sensor and no tool could read it; that was wrong. NVIDIA left it out of its public interface, and since
-  July 2026 HWMonitor 1.65.1, HWiNFO and AIDA64 read it another way. The sensor library PC Diagnostic uses
-  (LibreHardwareMonitor 0.9.6) does not yet, so the Readings tab now says so and points to those tools.
-  ([#1](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/1))
+- **1.0.0 was wrong about the RTX 50 hotspot.** It said NVIDIA had removed the sensor and no tool could read it; the
+  sensor is there, only left out of NVIDIA's public interfaces. Where the reading still fails (PawnIO missing), the
+  Readings tab says why and what to do instead of calling it a reading the card cannot have.
 
 ## [1.0.5] - 2026-10-25
 
@@ -70,6 +76,7 @@ The first public release: free and open source under the GPL-3.0, every feature 
 - On a GeForce RTX 50 series GPU the hotspot temperature shows as "Not available on this GPU" (NVIDIA removed the
   sensor) instead of counting as an unavailable reading. ([#1](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/1))
 
+[1.0.6]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.6
 [1.0.5]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.5
 [1.0.4]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.4
 [1.0.2]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.2

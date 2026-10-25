@@ -8,7 +8,8 @@
     components shipped outside a package manager (.NET runtime, SQLite, PawnIO, the Inno Setup installer engine).
     A package's own license file is quoted when it has one; otherwise the standard text from installer\licenses is.
     Allowed licenses follow ARCHITECTURE 2a: permissive licenses, MPL-2.0 only for LibreHardwareMonitor and its
-    libraries (unmodified), and PawnIO's GPL-2.0 only as the separate, unmodified setup program.
+    libraries (unmodified), PawnIO's GPL-2.0 only as the separate, unmodified setup program, and LGPL-2.1 only for the
+    unmodified PawnIO module files the driver runs.
     Runs on Windows PowerShell 5.1.
 #>
 [CmdletBinding()]
@@ -135,6 +136,8 @@ Add-Component 'SQLite' '3 (e_sqlite3 from SQLitePCLRaw)' 'Public domain' 'https:
     'The SQLite source code is in the public domain: "Anyone is free to copy, modify, publish, use, compile, sell, or distribute the original SQLite code, either in source code form or as a compiled binary, for any purpose, commercial or non-commercial, and by any means."' 'bundled native library'
 Add-Component 'PawnIO (driver installer, PawnIO_setup.exe)' $PawnIOVersion 'GPL-2.0-only' 'https://github.com/namazso/PawnIO (source: https://github.com/namazso/PawnIO and https://github.com/namazso/PawnIO.Setup)' `
     'Copyright namazso' "PawnIO is a separate program, shipped unmodified and installed by its own setup when you choose it during installation (ARCHITECTURE 2a). LibreHardwareMonitor talks to it through its device interface; PC Diagnostic does not link to it. Its complete source code is available at the links above; the GNU General Public License version 2 follows in the license texts." 'separate program'
+Add-Component 'PawnIO module Nvidia.bin (agent\pawnio\Nvidia.bin)' '0.2.11 (PawnIO.Modules)' 'LGPL-2.1-or-later' 'https://github.com/namazso/PawnIO.Modules (source: https://github.com/namazso/PawnIO.Modules/blob/0.2.11/Nvidia.p)' `
+    'Copyright (C) 2026 CapFrameX, Blacktempel' "A module the PawnIO driver runs to read NVIDIA RTX 50 series thermal registers, shipped unmodified as the signed file from the PawnIO.Modules 0.2.11 release. PC Diagnostic does not link to it; it hands the file to the driver. Its source is at the links above; the GNU Lesser General Public License version 2.1 follows in the license texts." 'PawnIO module'
 Add-Component 'SeaweedFS (PC Diagnostic Storage, tools\seaweedfs\weed.exe)' $SeaweedFSVersion 'Apache-2.0' 'https://github.com/seaweedfs/seaweedfs' `
     'Copyright Chris Lu and SeaweedFS contributors' "A separate program, shipped unmodified and run by PC Diagnostic on this PC only (127.0.0.1) as its object storage. The Apache License 2.0 follows in the license texts." 'separate program'
 Add-Component 'Inno Setup (installer engine)' $InnoVersion 'Inno Setup License' 'https://jrsoftware.org/isinfo.php' `
@@ -149,6 +152,7 @@ foreach ($component in $components) {
         if ($permissive -contains $id) { $allowed = $true }
         elseif ($id -eq 'MPL-2.0' -and $mplAllowed -contains $component.Name) { $allowed = $true }
         elseif ($id -eq 'GPL-2.0-only' -and $component.Source -eq 'separate program') { $allowed = $true }
+        elseif ($id -eq 'LGPL-2.1-or-later' -and $component.Source -eq 'PawnIO module') { $allowed = $true }
         elseif ($id -in @('Public domain', 'Inno Setup License')) { $allowed = $true }
         # Fonts the dashboard bundles: OFL-1.1 allows bundling with any software, only not selling the fonts by themselves.
         elseif ($id -eq 'OFL-1.1' -and $component.Name -like '@fontsource*') { $allowed = $true }

@@ -238,3 +238,98 @@ public sealed class NvmlGpuDetailProvider : IGpuDetailProvider
     /// <inheritdoc />
     public void Dispose() => _nvml?.Dispose();
 }
+
+/// <summary>
+/// The hotspot of NVIDIA GeForce RTX 50 series (Blackwell) GPUs, which NVAPI and NVML no longer report, from the GPU's
+/// thermal registers through PawnIO (<see cref="NvidiaThermalRegisters"/>). An adapter is taken on only when a first
+/// read gives a valid value, so other GPUs (which the module refuses) keep their hotspot from LibreHardwareMonitor.
+/// Needs the elevated recorder and the PawnIO driver; without them no adapter is taken on and the reason is logged.
+/// </summary>
+public sealed class PawnIoNvidiaGpuDetailProvider : IGpuDetailProvider
+{
+    private const uint NvidiaVendorId = 0x10DE;
+
+    private readonly HashSet<string> _supported = new(StringComparer.Ordinal);
+    private readonly Func<(NvidiaThermalRegisters? Registers, string Reason)> _open;
+    private NvidiaThermalRegisters? _registers;
+    private bool _openAttempted;
+    private string _openReason = "not loaded";
+
+    /// <summary>Creates the provider (the PawnIO module is loaded when an NVIDIA adapter is first seen).</summary>
+    public PawnIoNvidiaGpuDetailProvider()
+        : this(() => (NvidiaThermalRegisters.TryOpen(out var reason), reason))
+    {
+    }
+
+    internal PawnIoNvidiaGpuDetailProvider(Func<(NvidiaThermalRegisters? Registers, string Reason)> open) => _open = open;
+
+    /// <inheritdoc />
+    public string Id => "pawnio-nvidia";
+
+    /// <inheritdoc />
+    public int Priority => 90;
+
+    /// <inheritdoc />
+    public string Attach(IReadOnlyList<GpuAdapterBinding> adapters, D3dkmtAdapters kmt)
+    {
+        ArgumentNullException.ThrowIfNull(adapters);
+        _supported.Clear();
+        var nvidia = adapters.Where(a => a.Dxgi.VendorId == NvidiaVendorId && a.PciAddress is not null).ToList();
+        if (nvidia.Count == 0)
+        {
+            return "no NVIDIA adapter with a PCI address";
+        }
+
+        if (!_openAttempted)
+        {
+            _openAttempted = true;
+            (_registers, _openReason) = _open();
+        }
+
+        if (_registers is null)
+        {
+            return _openReason;
+        }
+
+        var refused = new List<string>();
+        foreach (var adapter in nvidia)
+        {
+            var (bus, device, function) = adapter.PciAddress!.Value;
+            if (_registers.TryReadHotspot(bus, device, function, out var error) is not null)
+            {
+                _supported.Add(adapter.AdapterKey);
+            }
+            else
+            {
+                refused.Add($"{adapter.Dxgi.Description} ({(error == 50 ? "not an RTX 50 series GPU" : $"error {error}")})");
+            }
+        }
+
+        return $"hotspot from thermal registers for {_supported.Count} adapter(s)" + (refused.Count > 0 ? $"; not for {string.Join(", ", refused)}" : string.Empty);
+    }
+
+    /// <inheritdoc />
+    public bool Supports(GpuAdapterBinding adapter) => adapter is not null && _supported.Contains(adapter.AdapterKey);
+
+    /// <inheritdoc />
+    public GpuDetails Read(GpuAdapterBinding adapter)
+    {
+        ArgumentNullException.ThrowIfNull(adapter);
+        var details = GpuDetails.None(Availability.Unsupported);
+        if (_registers is null || adapter.PciAddress is not { } address || !_supported.Contains(adapter.AdapterKey))
+        {
+            return details;
+        }
+
+        // A GPU that stops answering (asleep, or the bus busy with another tool) has a gap for this sample, not a value.
+        return details with
+        {
+            HotspotTemperatureC = _registers.TryReadHotspot(address.Bus, address.Device, address.Function, out _) is { } celsius
+                ? Reading<double>.Of(celsius)
+                : Reading<double>.Unavailable(Availability.Error),
+        };
+    }
+
+    /// <inheritdoc />
+    public void Dispose() => _registers?.Dispose();
+}

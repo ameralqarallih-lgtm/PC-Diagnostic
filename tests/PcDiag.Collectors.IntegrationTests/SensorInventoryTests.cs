@@ -97,6 +97,28 @@ public class LhmMappingTests
     }
 
     [Fact]
+    public void An_rtx_50_hotspot_is_the_hottest_valid_thermal_channel()
+    {
+        const long valid = 1L << 30;
+
+        // Channels as the PawnIO module returns them: bit 30 = valid, low 16 bits = 1/256 °C.
+        PcDiag.Platform.Windows.Gpu.NvidiaThermalRegisters.Hotspot([valid | (74 * 256), valid | (81 * 256 + 128), 90 * 256, valid | (66 * 256), 0, 0]).ShouldBe(81.5);
+        PcDiag.Platform.Windows.Gpu.NvidiaThermalRegisters.Hotspot([90 * 256, 0, 0, 0, 0, 0]).ShouldBeNull(); // nothing marked valid
+        PcDiag.Platform.Windows.Gpu.NvidiaThermalRegisters.Hotspot([valid | 0xFFFF, valid, 0, 0, 0, 0]).ShouldBeNull(); // 255.99 °C and 0 °C are not readings
+    }
+
+    [Fact]
+    public void Without_pawnio_no_adapter_gets_a_hotspot_from_the_thermal_registers()
+    {
+        using var provider = new PcDiag.Collectors.Gpu.PawnIoNvidiaGpuDetailProvider(() => (null, "the PawnIO driver is not available (error 2)"));
+        var rtx = new PcDiag.Collectors.Gpu.GpuAdapterBinding("gpu-10de-2c05-1", new PcDiag.Platform.Windows.Gpu.DxgiAdapterInfo("NVIDIA GeForce RTX 5070 Ti", 0x10DE, 0x2C05, 0, 0, 16L << 30, 0, default, false), (1, 0, 0));
+
+        provider.Attach([rtx], null!).ShouldBe("the PawnIO driver is not available (error 2)");
+        provider.Supports(rtx).ShouldBeFalse();
+        provider.Read(rtx).HotspotTemperatureC.HasValue.ShouldBeFalse();
+    }
+
+    [Fact]
     public void An_nvme_drive_takes_its_temperature_from_its_own_log_not_the_counters()
     {
         var provider = new StorageReliabilitySensorProvider(new ElevationInfo(true), TimeProvider.System);

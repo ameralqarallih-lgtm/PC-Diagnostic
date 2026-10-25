@@ -19,5 +19,7 @@
   <ItemGroup>
     <!-- The flight recorder's WPR profile goes next to the program (Program Files when installed). -->
     <None Update="Tracing\PcDiagnostic.wprp" Link="PcDiagnostic.wprp" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- PawnIO's signed NVIDIA module (PawnIO.Modules 0.2.11, LGPL-2.1, unmodified): a separate file the driver runs. -->
+    <None Update="PawnIo\Nvidia.bin" Link="pawnio\Nvidia.bin" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
