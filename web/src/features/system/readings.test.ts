@@ -57,13 +57,14 @@ describe('unavailable readings', () => {
     expect(by('cpu/package_temp')).toMatchObject({ label: 'CPU: package temperature', category: 'missing', why: 'Needs the sensor driver (PawnIO)', fix: expect.stringContaining('PawnIO') });
   });
 
-  it('say an RTX 50 series card has no hotspot sensor, not that the reading is missing', () => {
+  it('say why an RTX 50 series card has no hotspot reading, and where to see it', () => {
     const rtx50 = { id: 7, kind: 'gpu', name: 'NVIDIA GeForce RTX 5070 Ti', vendor: 'NVIDIA', details: { dedicatedMemoryBytes: 17e9 }, firstSeen: NOW - DAY, lastSeen: NOW, key: 'gpu-10de-2c05-1' };
     const rows = classifyReadings({ ...overview, devices: [...overview.devices, rtx50], availability: [
       { series: 'gpu.gpu-10de-2c05-1.hotspot_c', availability: 'Unsupported', reason: null, since: NOW },
       { series: 'gpu.gpu-10de-2c05-1.fan_rpm', availability: 'Unsupported', reason: null, since: NOW },
     ] });
-    expect(rows[0]).toMatchObject({ label: 'NVIDIA GeForce RTX 5070 Ti: hotspot temperature', category: 'notOnThisGpu', why: expect.stringMatching(/^Not available on this GPU/) });
+    // The sensor exists (HWMonitor and HWiNFO read it): a missing reading, not one the card cannot have.
+    expect(rows[0]).toMatchObject({ label: 'NVIDIA GeForce RTX 5070 Ti: hotspot temperature', category: 'missing', why: expect.stringContaining('LibreHardwareMonitor'), fix: expect.stringContaining('HWiNFO') });
     expect(rows[1]).toMatchObject({ category: 'missing' });
   });
 });

@@ -57,8 +57,9 @@ const NOT_ON_INTEGRATED = new Set(['fan_rpm', 'hotspot_c', 'mem_mhz', 'power_lim
 const NOT_ON_INTEL_INTEGRATED = new Set(['temp_c', 'core_mhz']);
 
 /**
- * NVIDIA's GeForce RTX 50 series and other Blackwell GPUs: their driver no longer reports a hotspot temperature, so no
- * tool can read it there.
+ * NVIDIA's GeForce RTX 50 series and other Blackwell GPUs: NVIDIA left the hotspot out of its public interface, and
+ * LibreHardwareMonitor (0.9.6) does not read it yet; HWMonitor 1.65.1, HWiNFO and AIDA64 read it another way since
+ * July 2026.
  */
 export function noHotspotSensor(device: DeviceInfo | undefined): boolean {
   return !!device && device.kind === 'gpu' && /\bRTX\s*50\d0\b|blackwell/i.test(device.name ?? '');
@@ -143,9 +144,8 @@ export function classifyReadings(overview: SystemOverview): ReadingRow[] {
         why = 'A wired or virtual adapter has no Wi-Fi signal.';
         fix = 'Nothing to do.';
       } else if (head === 'gpu' && metric === 'hotspot_c' && noHotspotSensor(device)) {
-        category = 'notOnThisGpu';
-        why = 'Not available on this GPU: NVIDIA removed the hotspot sensor from the GeForce RTX 50 series (Blackwell), so no monitoring tool can read it. The GPU temperature is still recorded.';
-        fix = 'Nothing to do.';
+        why = 'NVIDIA left the RTX 50 series (Blackwell) hotspot out of its public sensor interface, and the sensor library PC Diagnostic uses (LibreHardwareMonitor) does not read it yet. The sensor is there: HWMonitor 1.65.1 and later, HWiNFO and AIDA64 read it. The GPU temperature is still recorded.';
+        fix = 'Check it with HWMonitor 1.65.1 or later or HWiNFO for now; a healthy card runs about 12–20 °C above the GPU temperature.';
       } else if (head === 'gpu' && isIntegrated(device) && NOT_ON_INTEGRATED.has(metric)) {
         category = 'notApplicable';
         why = 'Integrated graphics have no fan, hotspot sensor, memory clock or power limit of their own.';

@@ -3,6 +3,15 @@
 All notable changes to PC Diagnostic & Incident Recorder. Each release's installer is on the
 [releases page](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases).
 
+## [Unreleased]
+
+### Fixed
+- **The RTX 50 series hotspot is shown as an unavailable reading again, with the real reason.** 1.0.0 said NVIDIA had
+  removed the sensor and no tool could read it; that was wrong. NVIDIA left it out of its public interface, and since
+  July 2026 HWMonitor 1.65.1, HWiNFO and AIDA64 read it another way. The sensor library PC Diagnostic uses
+  (LibreHardwareMonitor 0.9.6) does not yet, so the Readings tab now says so and points to those tools.
+  ([#1](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/1))
+
 ## [1.0.5] - 2026-10-25
 
 ### Fixed
