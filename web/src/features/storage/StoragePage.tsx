@@ -10,7 +10,7 @@ import { INCIDENT_SOURCES, USER_INCIDENT_TYPES, type StorageAction, type Storage
 import { formatBytes } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { LayoutBackups, WhereFilesAreKept } from './FileLocations';
-import { useCleanStorage, useDeleteIncidents, usePinIncident, useStorage } from './useStorage';
+import { useCleanStorage, useDeleteIncidents, usePinIncident, useSetSpaceLimit, useStorage } from './useStorage';
 
 const GB = 1024 ** 3;
 
@@ -117,6 +117,7 @@ export function StoragePage() {
   const pin = usePinIncident();
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [pending, setPending] = useState<PendingAction | null>(null);
+  const [editingLimit, setEditingLimit] = useState(false);
   const data = storage.data;
 
   const kinds = useMemo<KindRow[]>(
@@ -185,6 +186,11 @@ export function StoragePage() {
         >
           <strong>{recorder.condition === 'WritesPaused' ? 'Not recording to disk. ' : recorder.condition === 'LowSpace' ? 'The drive is getting full. ' : 'Over the space limit. '}</strong>
           {recorder.message}
+          {recorder.condition === 'OverLimit' && !editingLimit && (
+            <Button size="sm" variant="outline" className="ml-2" onClick={() => setEditingLimit(true)}>
+              Raise the limit
+            </Button>
+          )}
         </div>
       )}
       {data.recorderProblem && (
@@ -228,11 +234,11 @@ export function StoragePage() {
               <Database className="size-4" aria-hidden /> Limits
             </CardTitle>
             <Link to="/settings" hash="storage" className="text-sm text-accent hover:underline">
-              Change
+              All limits
             </Link>
           </CardHeader>
           <CardContent>
-            <Limits data={data} />
+            <Limits data={data} editing={editingLimit} onEditing={setEditingLimit} />
           </CardContent>
         </Card>
       </div>
@@ -392,6 +398,64 @@ export function StoragePage() {
   );
 }
 
+/**
+ * The space limit, changed in place: in GB (0 = no limit), up to what the drive could still hold, with what the
+ * recorded data uses now beside it. Saved with the other settings and applied by the recorder a few seconds later.
+ */
+function SpaceLimitEditor({ data, onDone }: { data: StorageResponse; onDone: () => void }) {
+  const save = useSetSpaceLimit();
+  const [value, setValue] = useState(String(data.limits.dataLimitGb));
+  const gb = Number(value);
+  const valid = value.trim() !== '' && Number.isInteger(gb) && gb >= 0 && gb <= 10_000;
+  const used = data.limitedBytes ?? data.totalBytes;
+  const room = data.drive ? Math.floor((used + data.drive.freeBytes) / GB) : null;
+  return (
+    <form
+      className="flex flex-col gap-2 rounded-md border border-border p-2.5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (valid) save.mutate(gb, { onSuccess: onDone });
+      }}
+    >
+      <label htmlFor="space-limit" className="font-medium">
+        Most space the recordings may use
+      </label>
+      <span className="flex items-center gap-2">
+        <input
+          id="space-limit"
+          type="number"
+          min={0}
+          max={10_000}
+          step={1}
+          value={value}
+          autoFocus
+          onChange={(e) => setValue(e.target.value)}
+          aria-invalid={!valid || undefined}
+          className="h-8 w-28 rounded-md border border-border bg-surface px-2 text-sm tabular-nums aria-[invalid=true]:border-danger"
+        />
+        <span className="text-xs text-muted">GB (0 = no limit)</span>
+      </span>
+      <p className="text-xs text-muted">
+        Recordings use <span className="tabular-nums">{formatBytes(used)}</span> now
+        {room !== null && (
+          <>
+            ; {data.drive!.name} could hold about <span className="tabular-nums">{room} GB</span> of them
+          </>
+        )}
+        .
+      </p>
+      <span className="flex gap-2">
+        <Button size="sm" type="submit" disabled={!valid || save.isPending}>
+          {save.isPending ? 'Saving…' : 'Save'}
+        </Button>
+        <Button size="sm" variant="ghost" type="button" onClick={onDone}>
+          Cancel
+        </Button>
+      </span>
+    </form>
+  );
+}
+
 /** "680 MB of 10 GB allowed", with a bar of how much of the limit is used. */
 function UsageSummary({ data }: { data: StorageResponse }) {
   const limit = data.limits.dataLimitGb * GB;
@@ -475,13 +539,24 @@ function Fact({ label, value, note }: { label: string; value: string; note?: str
 }
 
 /** The rules in plain words, in the order the recorder applies them. */
-function Limits({ data }: { data: StorageResponse }) {
+function Limits({ data, editing, onEditing }: { data: StorageResponse; editing: boolean; onEditing: (on: boolean) => void }) {
   const l = data.limits;
   return (
     <div className="flex flex-col gap-3 text-sm">
+      {editing ? (
+        <SpaceLimitEditor data={data} onDone={() => onEditing(false)} />
+      ) : (
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-muted">Space limit</span>
+          <span className="flex items-center gap-2">
+            <span className="font-medium tabular-nums">{l.dataLimitGb > 0 ? `${l.dataLimitGb} GB` : 'None'}</span>
+            <Button size="sm" variant="outline" onClick={() => onEditing(true)} aria-label="Change the space limit">
+              Change
+            </Button>
+          </span>
+        </div>
+      )}
       <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1.5">
-        <dt className="text-muted">Space limit</dt>
-        <dd className="text-right font-medium tabular-nums">{l.dataLimitGb > 0 ? `${l.dataLimitGb} GB` : 'None'}</dd>
         <dt className="text-muted">Keep free on {data.drive?.name ?? 'the drive'}</dt>
         <dd className="text-right font-medium tabular-nums">{l.keepFreeGb > 0 ? `${l.keepFreeGb} GB` : 'Only 1 GB'}</dd>
         <dt className="text-muted">Most incidents kept</dt>

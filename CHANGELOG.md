@@ -5,12 +5,16 @@ All notable changes to PC Diagnostic & Incident Recorder. Each release's install
 
 ## [1.0.7] - 2026-10-25
 
+### Added
+- **The space limit can be raised on the Storage page.** *Change* beside the limit, and *Raise the limit* in the
+  over-limit warning, open an editor that shows what the recordings use and what the drive could hold.
+
 ### Fixed
 - **The space limit counts only recordings.** It counted the whole data folder, including the character generator's
   AI models (about 55 GB once downloaded) and its Python. No clean-up of recordings can free that, so with the default
-  10 GB limit the recorder kept History at its shortest (2 hours of full detail, 7 days of summaries) and reported
-  being over the limit because of "pinned or still recording" incidents. The generator's folder is now its own line on
-  the Storage page and the limit leaves it out.
+  10 GB limit the recorder kept History at its shortest (2 hours of full detail, 7 days of summaries), removed the
+  oldest unpinned incidents, and reported being over the limit because of "pinned or still recording" incidents. The
+  generator's folder is now its own line on the Storage page and the limit leaves it out.
 
 ## [1.0.6] - 2026-10-25
 

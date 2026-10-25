@@ -112,6 +112,32 @@ describe('Storage page', () => {
     expect(within(screen.getByRole('region', { name: 'What uses the space' })).getByText(/Character generator/)).toBeInTheDocument();
   });
 
+  it('raises the space limit in place from the over-limit warning, keeping the other settings', async () => {
+    const saved = { file: 'settings.json', settings: { storage: { telemetryRetentionHours: 24, rollupRetentionDays: 30, writeBehindSeconds: 5, maxIncidents: 0, dataLimitGb: 10, keepFreeGb: 5 }, sampling: { systemIntervalMs: 1000 } } };
+    const over = storage({ recorder: { condition: 'OverLimit', message: 'PC Diagnostic’s recorded data uses 12 GB, more than the 10 GB limit.', checkedAt: null, freeBytes: 400 * GB, usedBytes: 12 * GB, lastPassAt: null, recent: [] } });
+    const fetchMock = mockApi({
+      'GET /api/v1/status': () => statusResponse(),
+      'GET /api/v1/storage': () => over,
+      'GET /api/v1/settings': () => saved,
+      'PUT /api/v1/settings': (_url, init) => ({ file: 'settings.json', settings: JSON.parse(String(init!.body)) }),
+    });
+    const user = userEvent.setup();
+    renderApp('/storage');
+
+    await user.click(await screen.findByRole('button', { name: 'Raise the limit' }));
+    const field = screen.getByLabelText('Most space the recordings may use');
+    await user.clear(field);
+    await user.type(field, '80');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(true));
+    const put = fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT')!;
+    const body = JSON.parse(String(put[1]!.body)) as typeof saved.settings;
+    expect(body.storage.dataLimitGb).toBe(80);
+    expect(body.storage.keepFreeGb).toBe(5);
+    expect(body.sampling.systemIntervalMs).toBe(1000);
+  });
+
   it('deletes the selected incidents after confirming, and cleans up through the recorder', async () => {
     let current = storage();
     const fetchMock = mockApi({

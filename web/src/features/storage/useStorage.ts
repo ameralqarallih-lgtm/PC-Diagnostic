@@ -1,12 +1,33 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/components/ui/toast';
 import { apiGet, apiPost, apiRequest } from '@/lib/api/client';
-import type { LocalStoreView, OverlayResponse, StorageCleanResult, StorageDeleteResult, StorageLocationRequest, StorageLocationsResponse, StorageResponse, StoredFile } from '@/lib/api/types';
+import type { LocalStoreView, OverlayResponse, SettingsResponse, StorageCleanResult, StorageDeleteResult, StorageLocationRequest, StorageLocationsResponse, StorageResponse, StoredFile } from '@/lib/api/types';
 import { formatBytes } from '@/lib/format';
 
 /** What the data uses, the limits and the recorder's view (refreshed every 15 s while the page is open). */
 export function useStorage() {
   return useQuery({ queryKey: ['storage'], queryFn: ({ signal }) => apiGet<StorageResponse>('/storage', signal), refetchInterval: 15_000 });
+}
+
+/**
+ * Changes the space limit from the Storage page: the saved settings with only the limit changed, checked on the server
+ * by the same rules as the Settings page. The recorder applies the new limit a few seconds later.
+ */
+export function useSetSpaceLimit() {
+  const client = useQueryClient();
+  const toast = useToast();
+  return useMutation({
+    mutationFn: async (dataLimitGb: number) => {
+      const { settings } = await apiGet<SettingsResponse>('/settings');
+      return apiRequest<SettingsResponse>('PUT', '/settings', { ...settings, storage: { ...settings.storage, dataLimitGb } });
+    },
+    onSuccess: (response, dataLimitGb) => {
+      if (response) client.setQueryData(['settings'], response);
+      toast.show({ title: dataLimitGb > 0 ? `Space limit set to ${dataLimitGb} GB` : 'Space limit removed', description: 'The recorder applies it within a few seconds.', tone: 'success' });
+      void client.invalidateQueries({ queryKey: ['storage'] });
+    },
+    onError: (error) => toast.show({ title: 'The space limit was not changed', description: error instanceof Error ? error.message : undefined, tone: 'error' }),
+  });
 }
 
 /** Applies the limits now and gives the recording database's free space back to the drive. */
