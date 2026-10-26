@@ -3,6 +3,15 @@
 All notable changes to PC Diagnostic & Incident Recorder. Each release's installer is on the
 [releases page](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases).
 
+## [1.0.8] - 2026-10-26
+
+### Fixed
+- **FPS showed "—" in games while another tool tracked frames.** When a present-tracking session of another program
+  (an RGB or overlay app's PresentMon, for example) stops keeping up, Windows drops the present events for every
+  session that is not independent, and PC Diagnostic's frame session received no presents at all (seen in ARK:
+  Survival Ascended). Its tracing sessions are now independent, so other tools no longer starve them, and the frame
+  session starts again if its reader stops.
+
 ## [1.0.7] - 2026-10-25
 
 ### Added
@@ -89,6 +98,7 @@ The first public release: free and open source under the GPL-3.0, every feature 
 - On a GeForce RTX 50 series GPU the hotspot temperature shows as "Not available on this GPU" (NVIDIA removed the
   sensor) instead of counting as an unavailable reading. ([#1](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/1))
 
+[1.0.8]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.8
 [1.0.7]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.7
 [1.0.6]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.6
 [1.0.5]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.5

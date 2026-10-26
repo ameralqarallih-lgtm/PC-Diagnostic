@@ -65,6 +65,14 @@ public sealed unsafe class EtwFrameMonitor(ElevationInfo elevation, TimeProvider
         lock (_lock)
         {
             _wantedUntil = time.GetUtcNow() + Linger;
+
+            // The session stopped under the reader (another tool stopped it by name, or ETW ended it): start it again
+            // rather than measure nothing until the recorder restarts.
+            if (_running && _consumer is { IsAlive: false })
+            {
+                Stop();
+            }
+
             if (_running || !elevation.IsElevated)
             {
                 Problem ??= elevation.IsElevated ? null : "Frame rates need the recorder to run as administrator.";

@@ -9,14 +9,18 @@ internal static unsafe partial class EtwNative
 {
     /// <summary>
     /// Starts a real-time session. Its buffers are handed to the consumer at least every <paramref name="flushMs"/>
-    /// (a second by default; less for a reading shown live, such as the frame rate).
+    /// (a second by default; less for a reading shown live, such as the frame rate). The session is independent: without
+    /// it, an event another session fails to take (a tool's present-tracking session whose reader stopped) is dropped for
+    /// every session enabled for it. On the dev PC that silenced every DXGI and graphics-kernel present event for the
+    /// frame session while other events still came, and the frame rate showed nothing (measured 26 Oct 2026: 0 presents
+    /// dependent, Edge's 105 a second independent).
     /// </summary>
     internal static uint StartSession(string name, out ulong session, uint flushMs = 1000)
     {
         var buffer = Properties(out var props);
         try
         {
-            props->LogFileMode = EventTraceRealTimeMode | (flushMs < 1000 ? EventTraceUseMsFlushTimer : 0);
+            props->LogFileMode = EventTraceRealTimeMode | EventTraceIndependentSessionMode | (flushMs < 1000 ? EventTraceUseMsFlushTimer : 0);
             props->BufferSize = 64;
             props->MinimumBuffers = 4;
             props->MaximumBuffers = 32;
@@ -64,6 +68,7 @@ internal static unsafe partial class EtwNative
     internal const byte TraceLevelInformation = 4;
     internal const uint EventTraceRealTimeMode = 0x100;
     internal const uint EventTraceUseMsFlushTimer = 0x10;
+    internal const uint EventTraceIndependentSessionMode = 0x08000000;
     internal const uint EventTraceControlStop = 1;
     internal const uint WnodeFlagTracedGuid = 0x00020000;
     internal const uint ProcessTraceModeRealTime = 0x100;
