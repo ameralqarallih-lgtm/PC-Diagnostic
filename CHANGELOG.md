@@ -10,13 +10,14 @@ All notable changes to PC Diagnostic & Incident Recorder. Each release's install
   (an RGB or overlay app's PresentMon, for example) stops keeping up, Windows drops the present events for every
   session that is not independent, and PC Diagnostic's frame session received no presents at all (seen in ARK:
   Survival Ascended). Its tracing sessions are now independent, so other tools no longer starve them, and the frame
-  session starts again if its reader stops.
+  session starts again if its reader stops. ([#10](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/10))
 
 ## [1.0.7] - 2026-10-25
 
 ### Added
 - **The space limit can be raised on the Storage page.** *Change* beside the limit, and *Raise the limit* in the
   over-limit warning, open an editor that shows what the recordings use and what the drive could hold.
+  ([#9](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/9))
 
 ### Fixed
 - **The space limit counts only recordings.** It counted the whole data folder, including the character generator's
@@ -24,6 +25,7 @@ All notable changes to PC Diagnostic & Incident Recorder. Each release's install
   10 GB limit the recorder kept History at its shortest (2 hours of full detail, 7 days of summaries), removed the
   oldest unpinned incidents, and reported being over the limit because of "pinned or still recording" incidents. The
   generator's folder is now its own line on the Storage page and the limit leaves it out.
+  ([#8](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/8))
 
 ## [1.0.6] - 2026-10-25
 
