@@ -1,5 +1,9 @@
+using System.Reflection;
+using Microsoft.Extensions.DependencyInjection;
+using PcDiag.Collectors;
 using PcDiag.Collectors.Gpu;
 using PcDiag.Collectors.Processes;
+using PcDiag.Core.Abstractions;
 using PcDiag.Core.Telemetry;
 
 namespace PcDiag.Collectors.IntegrationTests;
@@ -96,6 +100,27 @@ public class HangConfirmationTests
 
         hangs.Observe([1, 2], Start).ShouldBeEmpty();
         hangs.Observe([1, 2, 3], Start.AddSeconds(30)).ShouldBe([2]); // 1 draws, 3 has only just hung
+    }
+
+    [Fact]
+    public void The_recorder_hands_the_process_collector_what_the_gpu_collector_sees()
+    {
+        // Without this wiring nothing fails: every game would just read as not drawing and be called hung after 30 s.
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddOptions();
+        services.AddSingleton(TimeProvider.System);
+        services.AddSingleton(new ElevationInfo(false));
+        services.AddWindowsCollectors();
+        using var provider = services.BuildServiceProvider();
+
+        const BindingFlags Own = BindingFlags.NonPublic | BindingFlags.Instance;
+        var activity = provider.GetRequiredService<ProcessGpuActivity>();
+        typeof(GpuCollector).GetField("_activity", Own)!.GetValue(provider.GetRequiredService<GpuCollector>()).ShouldBeSameAs(activity);
+
+        var hangs = typeof(ProcessCollector).GetField("_hangs", Own)!.GetValue(provider.GetRequiredService<ProcessCollector>())!;
+        var reading = (Delegate)hangs.GetType().GetFields(Own).Single(f => typeof(Delegate).IsAssignableFrom(f.FieldType)).GetValue(hangs)!;
+        reading.Target.ShouldBeSameAs(activity);
     }
 
     [Fact]

@@ -13,6 +13,7 @@ All notable changes to PC Diagnostic & Incident Recorder. Each release's install
   The process list and Tune-up's advice use the same answer, so they no longer suggest ending a game that is loading.
 - **Windows' hang events of type "Quiesce"** (18 of 19 here, mostly helpers such as `dllhost.exe`) are kept as quiet
   events instead of raising incidents. A window that froze is still an incident.
+  ([#11](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/11))
 
 ## [1.0.8] - 2026-10-26
 
