@@ -4,8 +4,9 @@ namespace PcDiag.Collectors.Processes;
 /// Decides which windows really stopped responding. Windows calls a window hung (IsHungAppWindow) once it has not handled
 /// messages for about 5 seconds, and programs do that while working: a game's main thread is busy loading while it goes on
 /// drawing. Taking the first such answer, VALORANT and ARK were "not responding" many times a day while they played
-/// normally. Measured on the dev PC (Nov 2026, 158 periods): 68 % ended within 5 s, every game went on drawing throughout,
-/// and only two programs that never came back and did nothing would have counted. So a window counts after
+/// normally. Measured on the dev PC (Nov 2026, 158 periods): of the 153 that ended, 68 % took under 5 s and all under a
+/// minute; the games were still drawing through every period of 15 s or more; and only two programs that never came back and
+/// did nothing would have counted. So a window counts after
 /// <see cref="After"/> of being hung while its process is not drawing (under <see cref="DrawingPercent"/> of the GPU on
 /// average over <see cref="DrawingWindow"/>: one sample is not enough, ARK's read 0 % in the middle of a load). Without GPU
 /// readings the time alone decides. It stays counted until Windows no longer calls the window hung.

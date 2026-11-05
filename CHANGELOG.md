@@ -7,9 +7,10 @@ All notable changes to PC Diagnostic & Incident Recorder. Each release's install
 
 ### Fixed
 - **Programs that are working are no longer logged as not responding.** Windows calls a window hung once it has not
-  handled messages for about 5 seconds, which games do while they load, and each time that raised an incident. Across
-  158 stored periods, 68 % ended within 5 seconds and the games went on drawing throughout. A window now counts after
-  30 seconds hung while its program draws nothing (under 1 % of the GPU over 15 seconds), dated when the hang began.
+  handled messages for about 5 seconds, which games do while they load, and each time that raised an incident. Of 153
+  stored periods with a known end, 68 % took under 5 seconds and all under a minute, and the games were still drawing
+  through every period of 15 seconds or more. A window now counts after 30 seconds hung while its program draws nothing
+  (under 1 % of the GPU over 15 seconds), dated when the hang began.
   The process list and Tune-up's advice use the same answer, so they no longer suggest ending a game that is loading.
 - **Windows' hang events of type "Quiesce"** (18 of 19 here, mostly helpers such as `dllhost.exe`) are kept as quiet
   events instead of raising incidents. A window that froze is still an incident.
