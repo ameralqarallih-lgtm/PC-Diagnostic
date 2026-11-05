@@ -234,7 +234,7 @@
       "kind": "Event",
       "eventRules": [ "app.hang" ],
       "processEvents": [ "Hung" ],
-      "description": "An application window stops responding",
+      "description": "An application window stays unresponsive for 30 seconds while the program draws nothing, or Windows closes a frozen window",
       "severity": "Medium",
       "createIncident": true
     },

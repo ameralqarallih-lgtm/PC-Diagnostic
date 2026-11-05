@@ -34,6 +34,7 @@ public static class CollectorServiceCollectionExtensions
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IGpuDetailProvider, NvmlGpuDetailProvider>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IGpuDetailProvider, D3dkmtGpuDetailProvider>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IGpuDetailProvider, PawnIoNvidiaGpuDetailProvider>());
+        services.TryAddSingleton<ProcessGpuActivity>();
         services.AddPolledCollector<GpuCollector, GpuSample>((frame, sample) => frame.Gpu = sample);
         services.AddPolledCollector<DiskCollector, DiskSample>((frame, sample) => frame.Disk = sample);
         services.AddPolledCollector<NetworkCollector, NetworkSample>((frame, sample) => frame.Network = sample);

@@ -3,6 +3,17 @@
 All notable changes to PC Diagnostic & Incident Recorder. Each release's installer is on the
 [releases page](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases).
 
+## [1.0.9] - 2026-11-05
+
+### Fixed
+- **Programs that are working are no longer logged as not responding.** Windows calls a window hung once it has not
+  handled messages for about 5 seconds, which games do while they load, and each time that raised an incident. Across
+  158 stored periods, 68 % ended within 5 seconds and the games went on drawing throughout. A window now counts after
+  30 seconds hung while its program draws nothing (under 1 % of the GPU over 15 seconds), dated when the hang began.
+  The process list and Tune-up's advice use the same answer, so they no longer suggest ending a game that is loading.
+- **Windows' hang events of type "Quiesce"** (18 of 19 here, mostly helpers such as `dllhost.exe`) are kept as quiet
+  events instead of raising incidents. A window that froze is still an incident.
+
 ## [1.0.8] - 2026-10-26
 
 ### Fixed
@@ -100,6 +111,7 @@ The first public release: free and open source under the GPL-3.0, every feature 
 - On a GeForce RTX 50 series GPU the hotspot temperature shows as "Not available on this GPU" (NVIDIA removed the
   sensor) instead of counting as an unavailable reading. ([#1](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/1))
 
+[1.0.9]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.9
 [1.0.8]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.8
 [1.0.7]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.7
 [1.0.6]: https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/tag/v1.0.6

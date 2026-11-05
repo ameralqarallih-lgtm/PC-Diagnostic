@@ -60,7 +60,7 @@ public sealed class EventRule
     public string? Note { get; init; }
 }
 
-/// <summary>A condition on one event field. Exactly one of <see cref="EqualTo"/>, <see cref="NotEqualTo"/> or <see cref="MinAbs"/> is set.</summary>
+/// <summary>A condition on one event field. Exactly one of <see cref="EqualTo"/>, <see cref="NotEqualTo"/>, <see cref="Contains"/> or <see cref="MinAbs"/> is set.</summary>
 public sealed class EventRuleCondition
 {
     /// <summary>Field source, with the same syntax as <see cref="EventRule.Fields"/> values.</summary>
@@ -73,6 +73,9 @@ public sealed class EventRuleCondition
     /// <summary>The field is present and does not equal this text (case-insensitive).</summary>
     [JsonPropertyName("notEquals")]
     public string? NotEqualTo { get; init; }
+
+    /// <summary>The field contains this text (case-insensitive).</summary>
+    public string? Contains { get; init; }
 
     /// <summary>The field is a number whose absolute value is at least this.</summary>
     public double? MinAbs { get; init; }

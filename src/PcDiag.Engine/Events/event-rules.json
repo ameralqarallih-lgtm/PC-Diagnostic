@@ -454,6 +454,26 @@
       }
     },
     {
+      "id": "app.hang.quiesce",
+      "channel": "Application",
+      "providers": [ "Application Hang" ],
+      "eventIds": [ 1002 ],
+      "when": [ { "field": "HangType", "contains": "Quiesce" } ],
+      "category": "Other",
+      "severity": "Info",
+      "title": "{processName} was closed by Windows (hang type {hangType})",
+      "note": "Hang type Quiesce, not a frozen window: on the dev PC 18 of 19 hang events, from helpers such as dllhost.exe, mscopilot_proxy.exe and ShellExperienceHost.exe. A window that froze reads 'Top level window is idle' and takes the rule below.",
+      "fields": {
+        "processName": "AppName",
+        "pid": "ProcessId",
+        "processStart": "StartTime",
+        "appVersion": "AppVersion",
+        "hangType": "HangType",
+        "appPath": "ExeFileName",
+        "reportId": "ReportId"
+      }
+    },
+    {
       "id": "app.hang",
       "channel": "Application",
       "providers": [ "Application Hang" ],

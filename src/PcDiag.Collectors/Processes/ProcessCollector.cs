@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using PcDiag.Collectors.Gpu;
 using PcDiag.Core.Abstractions;
 using PcDiag.Core.Configuration;
 using PcDiag.Core.Events;
@@ -11,7 +12,8 @@ namespace PcDiag.Collectors.Processes;
 /// <summary>
 /// Every process, every process tick (default 2 s), from one NtQuerySystemInformation call: CPU %, CPU time,
 /// memory, I/O rates, threads, handles, priority. It detects lifecycle changes by comparing snapshots
-/// (started/stopped; processes shorter than one tick can be missed without ETW) and hangs with IsHungAppWindow.
+/// (started/stopped; processes shorter than one tick can be missed without ETW) and hangs with IsHungAppWindow, once
+/// <see cref="HangConfirmation"/> agrees.
 /// Crashes come from Windows Error Reporting events in the event engine (Phase 7).
 /// </summary>
 public sealed partial class ProcessCollector : IProcessCollector
@@ -33,6 +35,7 @@ public sealed partial class ProcessCollector : IProcessCollector
     private readonly Queue<ProcessKey> _toEnrich = new();
     private readonly Queue<ProcessKey> _toEnrichFirst = new(); // started after the baseline: most relevant to incidents
     private readonly HashSet<ProcessKey> _enriched = [];
+    private readonly HangConfirmation _hangs;
     private HashSet<int> _hung = [];
     private long _lastTimestamp;
     private bool _baselineTaken;
@@ -52,10 +55,11 @@ public sealed partial class ProcessCollector : IProcessCollector
 
     /// <summary>
     /// Creates the collector with the per-process I/O monitor and the signature checker: each program file's
-    /// signature is checked in the background and its process identity is sent again with the result.
+    /// signature is checked in the background and its process identity is sent again with the result. GPU use tells a
+    /// program that is still drawing from one that hangs.
     /// </summary>
     public ProcessCollector(IOptionsMonitor<PrivacyOptions> privacy, IEnumerable<IProcessIoMonitor> io, ProcessSignatures? signatures, TimeProvider timeProvider,
-        ILogger<ProcessCollector> logger)
+        ILogger<ProcessCollector> logger, ProcessGpuActivity? gpu = null)
     {
         ArgumentNullException.ThrowIfNull(io);
         _privacy = privacy;
@@ -63,6 +67,7 @@ public sealed partial class ProcessCollector : IProcessCollector
         _signatures = signatures;
         _timeProvider = timeProvider;
         _logger = logger;
+        _hangs = new HangConfirmation(gpu is null ? static _ => 0 : gpu.PercentOf);
     }
 
     /// <inheritdoc />
@@ -115,7 +120,7 @@ public sealed partial class ProcessCollector : IProcessCollector
             return ValueTask.FromResult(new ProcessSample(context.Timestamp, [], [], []));
         }
 
-        var hung = SafeFindHung();
+        var hung = _hangs.Observe(SafeFindHung(), context.Timestamp);
         var trueIo = TakeTrueIo(elapsed);
         var events = new List<ProcessLifecycleEvent>();
         var identities = new List<ProcessIdentityDetails>();
@@ -147,7 +152,10 @@ public sealed partial class ProcessCollector : IProcessCollector
             var state2 = hung.Contains(p.Key.Pid) ? ProcessState.NotResponding : ProcessState.Running;
             if (_baselineTaken && hung.Contains(p.Key.Pid) != _hung.Contains(p.Key.Pid) && !isNew)
             {
-                events.Add(new ProcessLifecycleEvent(context.Timestamp, p.Key, p.Name, state2 == ProcessState.NotResponding ? ProcessEventKind.Hung : ProcessEventKind.Recovered));
+                // A hang is dated when it began: an incident's minutes are the ones around the freeze, not 30 s later.
+                events.Add(state2 == ProcessState.NotResponding
+                    ? new ProcessLifecycleEvent(_hangs.Since(p.Key.Pid) ?? context.Timestamp, p.Key, p.Name, ProcessEventKind.Hung)
+                    : new ProcessLifecycleEvent(context.Timestamp, p.Key, p.Name, ProcessEventKind.Recovered));
             }
 
             var current = new ProcessMetrics(

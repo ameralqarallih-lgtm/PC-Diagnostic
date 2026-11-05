@@ -67,6 +67,11 @@ public sealed class CompiledEventRule
             return value is not null && !value.Equals(unwanted, StringComparison.OrdinalIgnoreCase);
         }
 
+        if (condition.Contains is { } part)
+        {
+            return value?.Contains(part, StringComparison.OrdinalIgnoreCase) == true;
+        }
+
         if (condition.MinAbs is { } min)
         {
             return EventValues.TryParseInteger(value, out var integer) ? Math.Abs((double)integer) >= min
@@ -271,10 +276,10 @@ public sealed partial class EventRuleSet
                 return $"condition: {error}";
             }
 
-            var set = (condition.EqualTo is null ? 0 : 1) + (condition.NotEqualTo is null ? 0 : 1) + (condition.MinAbs is null ? 0 : 1);
+            var set = (condition.EqualTo is null ? 0 : 1) + (condition.NotEqualTo is null ? 0 : 1) + (condition.Contains is null ? 0 : 1) + (condition.MinAbs is null ? 0 : 1);
             if (set != 1)
             {
-                return "each condition needs exactly one of equals, notEquals or minAbs";
+                return "each condition needs exactly one of equals, notEquals, contains or minAbs";
             }
         }
 

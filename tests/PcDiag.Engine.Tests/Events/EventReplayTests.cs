@@ -32,7 +32,7 @@ public class EventReplayTests
     [Theory]
     [InlineData("app-error-1000", "app.crash", EventCategory.ApplicationCrash, Severity.High)]
     [InlineData("dotnet-runtime-1026", "app.dotnet-unhandled-exception", EventCategory.ApplicationCrash, Severity.High)]
-    [InlineData("app-hang-1002", "app.hang", EventCategory.ApplicationHang, Severity.High)]
+    [InlineData("app-hang-1002", "app.hang.quiesce", EventCategory.Other, Severity.Info)]
     [InlineData("scm-7034", "service.crashed", EventCategory.Service, Severity.Medium)]
     [InlineData("scm-7000", "service.start-failed", EventCategory.Service, Severity.Medium)]
     [InlineData("nvlddmkm-153", "gpu.nvidia.error", EventCategory.Gpu, Severity.High)]

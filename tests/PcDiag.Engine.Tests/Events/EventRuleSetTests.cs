@@ -132,6 +132,21 @@ public class EventRuleSetTests
         expressions.ShouldAllBe(e => e.Split(" or ", StringSplitOptions.None).Length <= EventQueryBuilder.MaxIdsPerSelect);
     }
 
+    [Theory]
+    [InlineData("Top level window is idle", "app.hang", EventCategory.ApplicationHang)]
+    [InlineData("Cross-thread", "app.hang", EventCategory.ApplicationHang)]
+    [InlineData("Quiesce", "app.hang.quiesce", EventCategory.Other)]
+    [InlineData("Cross-thread;Quiesce", "app.hang.quiesce", EventCategory.Other)]
+    public void Only_a_frozen_window_is_an_application_hang(string hangType, string rule, EventCategory category)
+    {
+        var classifier = new EventClassifier(EventRuleSet.Load(Defaults, null), EventRedactor.None, 2000);
+
+        var result = classifier.Classify(Record("Application Hang", 1002, 2, "Application", new EventDataItem("AppName", "dllhost.exe"), new EventDataItem("HangType", hangType)), null)!;
+
+        result.Rule.Id.ShouldBe(rule);
+        result.Event.Category.ShouldBe(category);
+    }
+
     [Fact]
     public void Ignore_rules_win_regardless_of_order()
     {

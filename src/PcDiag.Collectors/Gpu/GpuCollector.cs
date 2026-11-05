@@ -20,6 +20,7 @@ public sealed partial class GpuCollector : IGpuCollector, IDisposable
     private static readonly TimeSpan MinRefreshInterval = TimeSpan.FromSeconds(30);
 
     private readonly IReadOnlyList<IGpuDetailProvider> _providers;
+    private readonly ProcessGpuActivity? _activity;
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<GpuCollector> _logger;
     private readonly GpuUsageAggregator _usage = new();
@@ -39,11 +40,12 @@ public sealed partial class GpuCollector : IGpuCollector, IDisposable
     private long _lastRefresh;
 
     /// <summary>Creates the collector.</summary>
-    public GpuCollector(IEnumerable<IGpuDetailProvider> providers, TimeProvider timeProvider, ILogger<GpuCollector> logger)
+    public GpuCollector(IEnumerable<IGpuDetailProvider> providers, TimeProvider timeProvider, ILogger<GpuCollector> logger, ProcessGpuActivity? activity = null)
     {
         _providers = providers.OrderByDescending(p => p.Priority).ToList();
         _timeProvider = timeProvider;
         _logger = logger;
+        _activity = activity;
     }
 
     /// <inheritdoc />
@@ -103,7 +105,9 @@ public sealed partial class GpuCollector : IGpuCollector, IDisposable
             adapters.Add(BuildAdapterSample(binding, descriptor, providers, pdhOk));
         }
 
-        return ValueTask.FromResult(new GpuSample(context.Timestamp, adapters, BuildProcesses()));
+        var processes = BuildProcesses();
+        _activity?.Update(processes);
+        return ValueTask.FromResult(new GpuSample(context.Timestamp, adapters, processes));
     }
 
     /// <inheritdoc />
