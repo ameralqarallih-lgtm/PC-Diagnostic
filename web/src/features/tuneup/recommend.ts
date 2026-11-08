@@ -4,7 +4,19 @@ import { formatBytes } from '@/lib/format';
 /** Where a recommendation leads: a tab to look at, or an action to run (always confirmed first). */
 export type RecommendationAction =
   | { kind: 'tab'; tab: TuneUpTab; label: string }
-  | { kind: 'apply'; action: string; items?: string[]; value?: string; label: string; confirm: string };
+  | {
+      kind: 'apply';
+      action: string;
+      items?: string[];
+      value?: string;
+      label: string;
+      confirm: string;
+      /**
+       * Safe mode leaves a program that is busy or has a window, which is exactly what this advice is about: the
+       * confirmation names the program and what is lost, so the answer to it decides. Protected programs stay refused.
+       */
+      overSafeMode?: boolean;
+    };
 
 export type TuneUpTab = 'advice' | 'optimize' | 'processes' | 'services' | 'startup' | 'cleanup' | 'system';
 
@@ -19,13 +31,22 @@ export interface Recommendation {
 
 const GB = 1024 ** 3;
 
+/** CPU use from which a background program counts as using a lot: the same work on any PC, not a share of its cores. */
+const BUSY_CORES = 0.8;
+
 const isOwn = (p: ControlProcess) => p.kind === 'app' || p.kind === 'background';
 
+/** "21 hours" or "3 days" (always 2 hours or more). */
+const longTime = (seconds: number) => {
+  const hours = Math.floor(seconds / 3600);
+  return hours >= 48 ? `${Math.floor(hours / 24)} days` : `${hours} hours`;
+};
+
 /**
- * Advice from what the PC is doing now: memory pressure and who holds it, programs that stopped responding, busy
- * background programs, WSL's virtual machine, full drives, what can be cleaned, hibernation on a desktop, the power
- * plan, Game Mode, crowded startup and background services. Each says why, and leads to the tab or action that
- * deals with it; nothing runs without the user confirming.
+ * Advice from what the PC is doing now: memory pressure and who holds it, programs that stopped responding, programs
+ * that may be stuck in a loop, busy background programs, WSL's virtual machine, full drives, what can be cleaned,
+ * hibernation on a desktop, the power plan, Game Mode, crowded startup and background services. Each says why, and
+ * leads to the tab or action that deals with it; nothing runs without the user confirming.
  */
 export function recommend(report: TuneUpReport | undefined, processes: ControlProcess[] | undefined, services: ControlService[] | undefined, live: LiveSnapshot | null | undefined): Recommendation[] {
   const items: Recommendation[] = [];
@@ -49,16 +70,27 @@ export function recommend(report: TuneUpReport | undefined, processes: ControlPr
     });
   }
 
-  // WSL / Hyper-V virtual machine.
+  // WSL / Hyper-V virtual machine: memory, and GPU memory its programs (AI models, say) hold through vmwp.exe.
   const vm = report?.system;
-  if (vm?.wslRunning && (vm.wslBytes ?? 0) >= 2 * GB) {
+  const vmGpu = procs.filter((p) => /^vmwp\.exe$/i.test(p.name)).reduce((sum, p) => sum + (p.gpuMemoryBytes ?? 0), 0);
+  const wslMemory = vm?.wslRunning && (vm.wslBytes ?? 0) >= 2 * GB;
+  if (vm?.wslRunning && (wslMemory || vmGpu >= 2 * GB)) {
+    const what = [wslMemory ? `${formatBytes(vm.wslBytes)} of memory` : null, vmGpu >= 2 * GB ? `${formatBytes(vmGpu)} of GPU memory` : null].filter(Boolean).join(' and ');
     items.push({
       id: 'wsl',
       level: used != null && used >= 85 ? 'high' : 'medium',
-      title: `WSL holds ${formatBytes(vm.wslBytes)} of memory`,
+      title: `WSL holds ${what}`,
       detail:
-        'The Linux subsystem (and Docker Desktop, which runs on it) keeps memory it once used. Shutting it down gives it back; it starts again when needed. To limit it for good, set memory= in %UserProfile%\\.wslconfig.',
+        'The Linux subsystem (and Docker Desktop, which runs on it) keeps memory it once used, and programs in it keep the GPU memory they load until they end, leaving less for games. Shutting it down gives both back; it starts again when needed. To limit its memory for good, set memory= in %UserProfile%\\.wslconfig.',
       action: { kind: 'apply', action: 'shutdown-wsl', label: 'Shut down WSL', confirm: 'Linux programs and Docker containers running in WSL stop. Unsaved work in them is lost.' },
+    });
+  } else if (vmGpu >= 2 * GB) {
+    items.push({
+      id: 'vm-gpu',
+      level: 'medium',
+      title: `A virtual machine holds ${formatBytes(vmGpu)} of GPU memory`,
+      detail: 'A Hyper-V or Docker machine (vmwp.exe): programs in it keep the GPU memory they load until they end, leaving less for games. Stop what runs in it, or the machine, when you do not need it.',
+      action: { kind: 'tab', tab: 'processes', label: 'See the processes' },
     });
   }
 
@@ -76,12 +108,34 @@ export function recommend(report: TuneUpReport | undefined, processes: ControlPr
         items: hung.map((p) => `${p.pid}:${p.startTicks}`),
         label: hung.length === 1 ? 'End it' : 'End them',
         confirm: `End ${hung.map((p) => p.name).join(', ')}? Unsaved work in ${hung.length === 1 ? 'it' : 'them'} is lost.`,
+        overSafeMode: true,
+      },
+    });
+  }
+
+  // Programs that may be stuck in a loop. WSL's virtual machine is many programs, with its own advice above.
+  const stuck = procs.filter((p) => p.steadyCoreSeconds != null && isOwn(p) && p.protection === 'None' && !/^vmmem/i.test(p.name));
+  for (const p of stuck) {
+    items.push({
+      id: `stuck-${p.pid}`,
+      level: 'medium',
+      title: `${p.name} has used a full CPU core without a break for ${longTime(p.steadyCoreSeconds!)}`,
+      detail: 'A program stuck in a loop looks like this: it does nothing useful but keeps a core, the fans and the power busy. A long job you started looks the same, so end it only if you expect nothing from it.',
+      action: {
+        kind: 'apply',
+        action: 'end-processes',
+        items: [`${p.pid}:${p.startTicks}`],
+        label: 'End it',
+        confirm: `End ${p.name}? If it is still doing real work, that work and anything unsaved is lost.`,
+        overSafeMode: true,
       },
     });
   }
 
   // Busy background programs.
-  const busy = procs.filter((p) => p.kind === 'background' && ((p.cpuPercent ?? 0) >= 10 || (p.workingSetBytes ?? 0) >= 1.5 * GB));
+  const processors = live?.cpu?.logicalProcessors;
+  const coresOf = (p: ControlProcess) => (p.cpuPercent != null && processors ? (p.cpuPercent / 100) * processors : null);
+  const busy = procs.filter((p) => p.kind === 'background' && !stuck.includes(p) && ((coresOf(p) ?? 0) >= BUSY_CORES || (p.workingSetBytes ?? 0) >= 1.5 * GB));
   if (busy.length > 0) {
     items.push({
       id: 'busy-background',
@@ -89,7 +143,7 @@ export function recommend(report: TuneUpReport | undefined, processes: ControlPr
       title: `${busy.length} background program${busy.length === 1 ? '' : 's'} use a lot`,
       detail: busy
         .slice(0, 4)
-        .map((p) => `${p.name}: ${p.cpuPercent != null ? `${p.cpuPercent.toFixed(1)}% CPU, ` : ''}${formatBytes(p.workingSetBytes)}`)
+        .map((p) => `${p.name}: ${coresOf(p) != null ? `${coresOf(p)!.toFixed(1)} cores (${p.cpuPercent!.toFixed(1)}% of the CPU), ` : ''}${formatBytes(p.workingSetBytes)}`)
         .join('; '),
       action: { kind: 'tab', tab: 'processes', label: 'See the processes' },
     });

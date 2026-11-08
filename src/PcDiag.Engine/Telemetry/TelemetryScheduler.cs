@@ -166,7 +166,7 @@ public sealed partial class TelemetryScheduler
             if (!task.IsCompleted)
             {
                 missed++;
-                slot.RecordFailure(null, $"did not finish within {plan.CollectorTimeout.TotalMilliseconds:F0} ms");
+                slot.RecordFailure(null, $"did not finish within {plan.CollectorTimeout.TotalMilliseconds:F0} ms", slow: true);
             }
             else if (task.IsCompletedSuccessfully)
             {
@@ -204,6 +204,7 @@ public sealed partial class TelemetryScheduler
     private sealed class CollectorSlot(IScheduledCollector collector, ILogger logger)
     {
         private int _consecutiveFailures;
+        private bool _ran;
 
         public IScheduledCollector Collector { get; } = collector;
 
@@ -213,6 +214,7 @@ public sealed partial class TelemetryScheduler
 
         public void RecordSuccess()
         {
+            _ran = true;
             if (_consecutiveFailures > 0)
             {
                 LogCollectorRecovered(logger, Collector.Collector.Id, _consecutiveFailures);
@@ -220,9 +222,17 @@ public sealed partial class TelemetryScheduler
             }
         }
 
-        // Rate-limited: first failure, then every 60th, so a broken collector cannot flood the log.
-        public void RecordFailure(Exception? exception, string problem)
+        // Rate-limited: first failure, then every 60th, so a broken collector cannot flood the log. A slow first run is not one:
+        // it also loads the collector's code and opens its sources, and every start logged one warning per collector.
+        public void RecordFailure(Exception? exception, string problem, bool slow = false)
         {
+            var first = !_ran;
+            _ran = true;
+            if (slow && first)
+            {
+                return;
+            }
+
             _consecutiveFailures++;
             if (_consecutiveFailures == 1 || _consecutiveFailures % 60 == 0)
             {

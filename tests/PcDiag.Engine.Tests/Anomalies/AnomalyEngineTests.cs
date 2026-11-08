@@ -4,6 +4,7 @@ using PcDiag.Core.Anomalies;
 using PcDiag.Core.Configuration;
 using PcDiag.Core.Events;
 using PcDiag.Core.Incidents;
+using PcDiag.Core.Telemetry;
 using PcDiag.Engine.Anomalies;
 
 namespace PcDiag.Engine.Tests.Anomalies;
@@ -363,6 +364,42 @@ public sealed class TriggerServiceTests : IDisposable
         _time.Advance(TimeSpan.FromMinutes(3));
         (await _service.HandleAsync(old, CancellationToken.None)).ShouldBe(TriggerService.Outcome.Stale);
         _capture.Triggers.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_gpu_memory_incident_names_the_holder_and_stays_quiet_about_it_for_hours()
+    {
+        // The dev PC in Nov 2026: WSL's virtual machine loaded about 21 GB onto the GPU roughly every hour.
+        var directory = new PcDiag.Engine.Control.ProcessDirectory();
+        using var service = new TriggerService(new AnomalyTriggerChannel(), _engine, _capture, _options, _time, NullLogger<TriggerService>.Instance, processes: directory);
+        long sequence = 0;
+        async Task HoldingAsync(string name, long gigabytes)
+        {
+            var at = _time.GetUtcNow();
+            static ProcessMetrics Process(int pid, string name) => new(new ProcessKey(pid, 1), name, Reading<double>.Of(0), Reading<long>.Of(0), Reading<long>.Of(0), Reading<long>.Of(0),
+                Reading<long>.Of(0), Reading<double>.Of(0), Reading<double>.Of(0), Reading<int>.Of(1), Reading<int>.Of(1), Reading<int>.Of(8), ProcessState.Running);
+            var gpu = new GpuSample(at, [], [new GpuProcessUsage(77, "gpu", 40, "3D", Reading<long>.Of(gigabytes << 30)), new GpuProcessUsage(78, "gpu", 2, "3D", Reading<long>.Of(2L << 30))]);
+            await directory.ConsumeAsync(new SampleFrame(++sequence, at, Gpu: gpu, Processes: new ProcessSample(at, [Process(77, name), Process(78, "dwm.exe")], [], [])), CancellationToken.None);
+        }
+
+        await HoldingAsync("vmwp.exe", 21);
+        (await service.HandleAsync(await TriggerAsync("gpu-vram-high-sustained", "98 % (peak 98 %)"), CancellationToken.None)).ShouldBe(TriggerService.Outcome.Created);
+        _capture.Triggers[^1].Detail.ShouldBe("GPU memory nearly full for minutes: 98 % (peak 98 %); vmwp.exe (a virtual machine) holds 21 GB");
+
+        // An hour later the same program fills it again: past the cooldown, but nothing new.
+        _time.Advance(TimeSpan.FromHours(1));
+        (await service.HandleAsync(await TriggerAsync("gpu-vram-high-sustained", "98 %"), CancellationToken.None)).ShouldBe(TriggerService.Outcome.Cooldown);
+
+        // Another program is news.
+        await HoldingAsync("ShooterGame.exe", 9);
+        (await service.HandleAsync(await TriggerAsync("gpu-vram-high-sustained", "95 %"), CancellationToken.None)).ShouldBe(TriggerService.Outcome.Created);
+        _capture.Triggers[^1].Detail.ShouldEndWith("; ShooterGame.exe holds 9.0 GB");
+
+        // After the quiet time the first program counts again.
+        _time.Advance(TriggerService.SameHolderQuiet);
+        await HoldingAsync("vmwp.exe", 21);
+        (await service.HandleAsync(await TriggerAsync("gpu-vram-high-sustained", "97 %"), CancellationToken.None)).ShouldBe(TriggerService.Outcome.Created);
+        _capture.Triggers.Count.ShouldBe(3);
     }
 
     [Fact]

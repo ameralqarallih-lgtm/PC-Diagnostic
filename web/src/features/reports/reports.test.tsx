@@ -28,7 +28,7 @@ const preview: ProblemReport = {
 const settings: SettingsResponse = {
   file: 'C:\\data\\settings.json',
   settings: {
-    recorder: { mode: 'Manual', schedule: [], startAgentAtLogon: false, preIncidentMinutes: 10, postIncidentSeconds: 120, ringBufferMaxMegabytes: 64 },
+    recorder: { mode: 'Manual', schedule: [], preIncidentMinutes: 10, postIncidentSeconds: 120, ringBufferMaxMegabytes: 64 },
     sampling: { systemIntervalMs: 1000, sensorIntervalMs: 1000, processIntervalMs: 2000, inventoryIntervalSeconds: 10, topProcessCount: 25, cpuBudgetPercent: 2 },
     storage: { telemetryRetentionHours: 24, rollupRetentionDays: 30, writeBehindSeconds: 5, maxIncidents: 0, dataLimitGb: 10, keepFreeGb: 5 },
     events: { backfillMinutes: 30, bootBackfillMaxHours: 24, maxPerRulePerMinute: 20, maxMessageLength: 2000 },

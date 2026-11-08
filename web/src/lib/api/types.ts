@@ -576,7 +576,6 @@ export interface UserSettings {
     schedule: RecordingWindowSetting[];
     /** The last custom recording started from the dashboard, offered again next time. */
     customSelection?: RecordingSelection | null;
-    startAgentAtLogon: boolean;
     /** While not recording (and not paused), watch for problems in memory; a problem starts a recording. */
     watchWhenNotRecording?: boolean;
     preIncidentMinutes: number;
@@ -904,6 +903,8 @@ export interface ControlProcess {
   gpuPercent?: number | null;
   gpuMemoryBytes?: number | null;
   netBytesPerSec?: number | null;
+  /** How long it has held about one CPU core without a break, once that is hours long (it may be stuck in a loop). */
+  steadyCoreSeconds?: number | null;
 }
 
 export interface ControlService {

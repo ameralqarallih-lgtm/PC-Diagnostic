@@ -81,7 +81,7 @@ internal sealed class FakeAgentClient : IAgentClient
             Trend: command == AgentCommands.Trend ? Trend(args?.TrendMinutes ?? 10) : null,
             Catalog: command == AgentCommands.Catalog ? new RecordingCatalog([new("cpu", "CPU", "cpu", [new(RecordingItems.CpuUsage, "Utilization")])]) : null,
             Processes: command == AgentCommands.ControlProcesses
-                ? [new PcDiag.Core.Control.ControlProcess(1234, 638_000_000_000_000_000, 4, "game.exe", @"C:\Games\game.exe", "Game Studio", "app", PcDiag.Core.Control.ControlProtection.None, null, 25, 1_000_000, 900_000, 20, 300, "Normal", false, 1, [], DateTimeOffset.UnixEpoch)]
+                ? [new PcDiag.Core.Control.ControlProcess(1234, 638_000_000_000_000_000, 4, "game.exe", @"C:\Games\game.exe", "Game Studio", "app", PcDiag.Core.Control.ControlProtection.None, null, 25, 1_000_000, 900_000, 20, 300, "Normal", false, 1, [], DateTimeOffset.UnixEpoch, SteadyCoreSeconds: 75_600)]
                 : null,
             Result: command is AgentCommands.ProcessAction or AgentCommands.ServiceAction or AgentCommands.TuneUpApply ? new PcDiag.Core.Control.ControlResult(true, "Done.", Changed: 1) : null,
             Overlay: command is AgentCommands.OverlayState or AgentCommands.OverlayArrange

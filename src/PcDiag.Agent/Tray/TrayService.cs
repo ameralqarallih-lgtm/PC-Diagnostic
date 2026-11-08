@@ -21,7 +21,8 @@ internal sealed partial class TrayService(
     IIncidentCapture capture,
     IHostApplicationLifetime lifetime,
     ILogger<TrayService> logger,
-    Core.Overlay.IOverlayControl? overlay = null) : IHostedService
+    Core.Overlay.IOverlayControl? overlay = null,
+    StopReason? reason = null) : IHostedService
 {
     private readonly TaskCompletionSource _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private Thread? _thread;
@@ -63,7 +64,7 @@ internal sealed partial class TrayService(
             Application.SetCompatibleTextRenderingDefault(false);
             SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
             var dashboard = new DashboardLauncher(paths, options.Value, elevation, time, logger, new DesktopShell());
-            using var context = new TrayContext(recorder, capture, lifetime, dashboard, options.Value, logger, overlay);
+            using var context = new TrayContext(recorder, capture, lifetime, dashboard, options.Value, logger, overlay, reason);
             _context = context;
             _ready.TrySetResult();
             Application.Run(context);

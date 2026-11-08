@@ -486,7 +486,7 @@ internal sealed partial class OverlayHost : IDisposable
             stillPicture?.Dispose();
             _deviceSpots[display.Key] = screenSpots;
             DrawDeviceCharacters(frame, display, over ? boxes : [], _moving ? MotionSeconds() : _stillAt);
-            DeviceFrames?.Invoke(display.Key, frame, composeOnly);
+            SendDeviceFrame(display.Key, frame, composeOnly);
         }
 
         if (!composeOnly)
@@ -562,7 +562,7 @@ internal sealed partial class OverlayHost : IDisposable
             }
         }
 
-        DeviceFrames?.Invoke(display.Key, frame, true);
+        SendDeviceFrame(display.Key, frame, true);
         return true;
     }
 
@@ -608,6 +608,26 @@ internal sealed partial class OverlayHost : IDisposable
         }
     }
 
+    /// <summary>
+    /// A frame for a USB screen, handed on to be encoded and sent; when it went is kept, so the characters' timer does not
+    /// send another right after it.
+    /// </summary>
+    private void SendDeviceFrame(string key, Bitmap frame, bool moving)
+    {
+        _deviceSentAt[key] = System.Diagnostics.Stopwatch.GetTimestamp();
+        DeviceFrames?.Invoke(key, frame, moving);
+    }
+
+    /// <summary>
+    /// A screen's frame from the moving background or a gliding value already shows the characters where they are now, so
+    /// the characters' timer skips a screen that was sent one this recently. Each made its own frames, up to 50 a second
+    /// on the dev PC's screen (backgrounds 20, characters 30), for a screen that showed about 30: the rest were drawn and
+    /// then dropped while the one before was still being encoded.
+    /// </summary>
+    internal static readonly TimeSpan CharacterFrameGap = TimeSpan.FromMilliseconds(25);
+
+    private readonly Dictionary<string, long> _deviceSentAt = new(StringComparer.Ordinal);
+
     /// <summary>The USB screens' characters moved on: drawn over each screen's kept picture and sent, 30 times a second.</summary>
     private void DeviceCharactersTick()
     {
@@ -625,6 +645,11 @@ internal sealed partial class OverlayHost : IDisposable
                 continue;
             }
 
+            if (_deviceSentAt.TryGetValue(display.Key, out var sent) && System.Diagnostics.Stopwatch.GetElapsedTime(sent) < CharacterFrameGap)
+            {
+                continue;
+            }
+
             if (_deviceFrame is null || _deviceFrame.Size != kept.Picture.Size)
             {
                 _deviceFrame?.Dispose();
@@ -638,7 +663,7 @@ internal sealed partial class OverlayHost : IDisposable
             }
 
             DrawDeviceCharacters(_deviceFrame, display, kept.Boxes, moment);
-            DeviceFrames?.Invoke(display.Key, _deviceFrame, true);
+            SendDeviceFrame(display.Key, _deviceFrame, true);
         }
     }
 

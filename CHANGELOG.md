@@ -3,6 +3,50 @@
 All notable changes to PC Diagnostic & Incident Recorder. Each release's installer is on the
 [releases page](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases).
 
+## [1.0.10] - 2026-11-08
+
+### Fixed
+- **Every crash becomes an incident.** A blue screen or an unexpected shutdown used to make one only while the recorder
+  was recording, and was not looked for at all after the recorder had been stopped: Windows logged 12 unexpected
+  shutdowns in 30 days on one PC, and PC Diagnostic made 1 incident. Now a crash while the recorder only watched is an
+  incident (with no minutes from before: they were in memory), and after a clean stop the recorder still reads Windows'
+  log at its next start, so a crash while it was off is one too, titled "… while the recorder was off" and dated when
+  Windows came back. ([#12](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/12))
+- **GPU memory incidents name the program and stop repeating for it.** The title says which program holds the most GPU
+  memory ("…: 98 %; vmwp.exe (a virtual machine) holds 21 GB"), and the rule stays quiet about that program for 12 hours;
+  another program still makes an incident after the usual cooldown. WSL's virtual machine had made 15 incidents in 36
+  hours on one PC. Tune-up's WSL advice now counts the GPU memory it holds, and another virtual machine's GPU memory gets
+  advice of its own. ([#13](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/13))
+- **CPU limits are in cores, the same work on any PC:** busy background programs in the advice from 0.8 of a core, the
+  optimizer's list from 0.4, safe mode's "it is busy" from 0.16 (the old 10 %, 5 % and 2 % of an 8-thread PC). A full
+  core is only about 4 % of a 24-thread PC and was under every limit.
+  ([#15](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/15))
+- **Ending a program from Tune-up's advice works in safe mode.** *End it* for a program that is not responding or stuck
+  was refused because it had a window or was busy; the confirmation names the program, and protected programs are still
+  refused. ([#16](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/16))
+- **Updates stop the recorder cleanly, and a clean stop says why.** The installer and the uninstaller ask the recorder to
+  stop and wait up to 20 seconds before ending it by force (killed, it counted as an unexpected stop at its next start;
+  an update from 1.0.9 still ends it by force once, since 1.0.9 does not listen). The log's last line says whether you
+  chose Exit in the tray, Windows ended the session, the installer asked, or another program closed it.
+  ([#18](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/18))
+- **USB screens draw fewer wasted frames.** A character frame is skipped when the moving background or a gliding value
+  sent the screen one in the last 25 ms (that frame shows the characters where they are); before, each made its own, up
+  to 50 a second for a screen that showed about 30. ([#19](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/19))
+- The unused `Recorder:StartAgentAtLogon` setting is removed (the installer's *Start the recorder when I sign in* option
+  decides), and a collector's slow first run and a sensor's first update at each start are no longer logged as warnings
+  (about 14 at every start).
+
+### Added
+- **Tune-up notices a program stuck in a loop.** A program of your own that has held about one CPU core (0.8 to 1.2)
+  without drawing, in every 5-minute slice for 2 hours or more, gets a line in the advice with *End it*. Replayed over 11
+  days of stored samples, only a stuck script and WSL's virtual machine (left out) reached 2 hours; compilers, Defender,
+  games and node.exe did not. A long job on one thread looks the same, so it is advice, never an incident.
+  ([#14](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/14))
+
+### Changed
+- **The Incidents list opens ungrouped and newest first on every visit**, with the *Group by* / *Sort by* bars and the
+  draggable fields shown as on the other lists. ([#17](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/17))
+
 ## [1.0.9] - 2026-11-05
 
 ### Fixed

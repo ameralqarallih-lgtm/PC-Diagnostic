@@ -35,7 +35,9 @@ internal static class AgentHost
         builder.Services.AddPcDiagEngine();
         builder.Services.AddOptions<AgentOptions>().Bind(builder.Configuration.GetSection(AgentOptions.SectionName)).ValidateOnStart();
         builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<AgentOptions>, AgentOptionsValidator>());
+        builder.Services.AddSingleton<StopReason>();
         builder.Services.AddHostedService<AgentLifetimeService>();
+        builder.Services.AddHostedService<ExitSignalService>();
         builder.Services.AddHostedService<AgentIpcService>();
         builder.Services.AddHostedService<TrayService>();
 

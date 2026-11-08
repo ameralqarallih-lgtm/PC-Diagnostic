@@ -16,6 +16,7 @@ public sealed class ProcessDirectory : ISampleConsumer
     private DateTimeOffset? _sampledAt;
     private Dictionary<int, (double Percent, long MemoryBytes)> _gpu = [];
     private IReadOnlyList<PhysicalDiskSample> _disks = [];
+    private readonly SteadyCoreWatch _steadyCore = new();
 
     /// <inheritdoc />
     public string Name => "process-directory";
@@ -79,6 +80,7 @@ public sealed class ProcessDirectory : ISampleConsumer
 
             _metrics = processes.Processes;
             _sampledAt = processes.Timestamp;
+            _steadyCore.Observe(processes.Processes, processes.Timestamp, pid => _gpu.TryGetValue(pid, out var usage) ? usage.Percent : 0);
             if (_identities.Count > processes.Processes.Count + 64)
             {
                 // Forget processes that have ended.
@@ -102,6 +104,15 @@ public sealed class ProcessDirectory : ISampleConsumer
         lock (_gate)
         {
             return _gpu.TryGetValue(pid, out var gpu) ? gpu : null;
+        }
+    }
+
+    /// <summary>How long a process has held about one CPU core without drawing, when <see cref="SteadyCoreWatch"/> finds that worth mentioning.</summary>
+    public TimeSpan? SteadyCoreFor(ProcessKey key)
+    {
+        lock (_gate)
+        {
+            return _steadyCore.SteadyFor(key);
         }
     }
 

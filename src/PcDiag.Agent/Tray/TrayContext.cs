@@ -35,10 +35,12 @@ internal sealed partial class TrayContext : ApplicationContext
     private readonly Core.Overlay.IOverlayControl? _overlay;
     private readonly ToolStripMenuItem _arrange = new("Arrange on-screen readings");
     private readonly ToolStripMenuItem _showClosed = new("Show closed panels") { Visible = false };
+    private readonly StopReason? _reason;
 
     public TrayContext(IRecordingControl recorder, IIncidentCapture capture, IHostApplicationLifetime lifetime, DashboardLauncher dashboard, AgentOptions options, ILogger logger,
-        Core.Overlay.IOverlayControl? overlay = null)
+        Core.Overlay.IOverlayControl? overlay = null, StopReason? reason = null)
     {
+        _reason = reason;
         _overlay = overlay;
         _recorder = recorder;
         _capture = capture;
@@ -144,7 +146,11 @@ internal sealed partial class TrayContext : ApplicationContext
             menu.Items.AddRange([_arrange, _showClosed, new ToolStripSeparator()]);
         }
 
-        menu.Items.Add("Exit PC Diagnostic", null, (_, _) => _lifetime.StopApplication());
+        menu.Items.Add("Exit PC Diagnostic", null, (_, _) =>
+        {
+            _reason?.Set("you chose Exit PC Diagnostic in the tray");
+            _lifetime.StopApplication();
+        });
         menu.Opening += (_, _) => Refresh();
         return menu;
     }

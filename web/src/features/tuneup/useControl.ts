@@ -63,8 +63,8 @@ export function useControlAction() {
   const queryClient = useQueryClient();
   const toast = useToast();
   return useMutation({
-    // Every action carries safe mode as it is when it is sent.
-    mutationFn: ({ path, body }: { path: string; body?: Record<string, unknown>; label?: string }) => apiPost<ControlResult>(path, { ...(body ?? {}), safe: isSafeMode() }),
+    // Every action carries safe mode as it is when it is sent, unless it says otherwise (see overSafeMode in recommend.ts).
+    mutationFn: ({ path, body }: { path: string; body?: Record<string, unknown>; label?: string }) => apiPost<ControlResult>(path, { safe: isSafeMode(), ...(body ?? {}) }),
     onSuccess: (result) => {
       if (result) {
         toast.show({ title: result.message, description: freed(result), tone: result.ok ? 'success' : 'error' });

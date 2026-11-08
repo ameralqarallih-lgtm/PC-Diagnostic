@@ -87,7 +87,8 @@ public sealed partial class SystemControlService(ProcessDirectory directory, ISy
                 directory.Gpu(pid) is { MemoryBytes: > 0 } vram ? vram.MemoryBytes : null,
                 metrics?.TrueIo is { } io ? io.NetReceiveBytesPerSec + io.NetSendBytesPerSec : null,
                 metrics?.TrueIo is { } disk ? disk.DiskReadBytesPerSec + disk.DiskWriteBytesPerSec
-                    : metrics is { } m && (m.IoReadBytesPerSec.HasValue || m.IoWriteBytesPerSec.HasValue) ? m.IoReadBytesPerSec.GetValueOrDefault(0) + m.IoWriteBytesPerSec.GetValueOrDefault(0) : null));
+                    : metrics is { } m && (m.IoReadBytesPerSec.HasValue || m.IoWriteBytesPerSec.HasValue) ? m.IoReadBytesPerSec.GetValueOrDefault(0) + m.IoWriteBytesPerSec.GetValueOrDefault(0) : null,
+                directory.SteadyCoreFor(key)?.TotalSeconds));
         }
 
         if (_paths.Count > 4096)
@@ -666,7 +667,9 @@ public sealed partial class SystemControlService(ProcessDirectory directory, ISy
 
     private const long VramWorthFreeing = 64L * 1024 * 1024;
     private const long MemoryWorthTrimming = 200L * 1024 * 1024;
-    private const double BusyBackground = 5;
+
+    /// <summary>CPU use from which a background program is worth lowering: 0.4 of a core, the same work on any PC.</summary>
+    private static readonly double BusyBackground = ResourceGuard.PercentOfPc(0.4, Environment.ProcessorCount);
 
     /// <summary>Background programs holding GPU memory, most first.</summary>
     private static IEnumerable<ControlProcess> VramHolders(IReadOnlyList<ControlProcess> processes) =>

@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DiagnosticJob, FindingEntry, IncidentDetail, IncidentSummary, LanStatus, PeriodReport, SettingsResponse, SignatureStatus, SystemOverview, TimelineEntry, TriggerRuleInfo } from '@/lib/api/types';
@@ -54,7 +54,7 @@ const emptySystem: SystemOverview = {
 const settings: SettingsResponse = {
   file: 'C:\\Users\\me\\AppData\\Local\\PcDiagnostic\\settings.json',
   settings: {
-    recorder: { mode: 'Manual', schedule: [], startAgentAtLogon: false, preIncidentMinutes: 10, postIncidentSeconds: 120, ringBufferMaxMegabytes: 64 },
+    recorder: { mode: 'Manual', schedule: [], preIncidentMinutes: 10, postIncidentSeconds: 120, ringBufferMaxMegabytes: 64 },
     sampling: { systemIntervalMs: 1000, sensorIntervalMs: 1000, processIntervalMs: 2000, inventoryIntervalSeconds: 10, topProcessCount: 25, cpuBudgetPercent: 2 },
     storage: { telemetryRetentionHours: 24, rollupRetentionDays: 30, writeBehindSeconds: 5, maxIncidents: 0, dataLimitGb: 10, keepFreeGb: 5 },
     events: { backfillMinutes: 30, bootBackfillMaxHours: 24, maxPerRulePerMinute: 20, maxMessageLength: 2000 },
@@ -444,6 +444,30 @@ describe('Incidents', () => {
 
     await waitFor(() => expect(router.state.location.search).toMatchObject({ type: 'GameCrash' }));
     await waitFor(() => expect(queryOf(fetchMock, '/api/v1/incidents')!.get('type')).toBe('GameCrash'));
+  });
+
+  it('opens ungrouped and newest first every time, with the grouping and sorting bars of every list', async () => {
+    // A grouping an earlier version remembered does not come back.
+    localStorage.setItem('pcdiag.view.incidents', JSON.stringify({ groupBy: ['severity'], sort: [{ id: 'when', desc: false }] }));
+    const older: IncidentSummary = { ...summary, key: 'INC-20261005-00001', title: 'Older stutter', centerAt: '2026-10-05T09:00:00Z', severity: 'Low' };
+    mockApi({ ...common, 'GET /api/v1/incidents': () => ({ total: 2, items: [older, summary] }) });
+    renderApp('/incidents');
+
+    const bars = await screen.findByTestId('table-view-bars');
+    expect(within(bars).getByRole('group', { name: 'Group by' })).toHaveTextContent('drag a field here');
+    expect(within(bars).getByLabelText('Fields to group or sort by')).toHaveTextContent('Severity');
+    const list = screen.getByRole('list', { name: 'Incidents' });
+    expect(within(list).getAllByText(/Screen Flicker|Older stutter/).map((e) => e.textContent)).toEqual(['Screen Flicker', 'Older stutter']);
+
+    await userEvent.selectOptions(within(bars).getByRole('combobox', { name: 'Add a grouping' }), 'severity');
+    expect(screen.getAllByRole('button', { name: /Severity:/ })).toHaveLength(2);
+    expect(localStorage.getItem('pcdiag.view.incidents')).toBeNull();
+
+    // Back on the page later: ungrouped again.
+    cleanup();
+    renderApp('/incidents');
+    await screen.findByTestId('table-view-bars');
+    expect(screen.queryByRole('button', { name: /Severity:/ })).not.toBeInTheDocument();
   });
 
   it('investigates: a timeline click picks the moment, notes and pin are saved, delete asks first', async () => {

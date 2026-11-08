@@ -450,14 +450,41 @@ public sealed class IncidentManagerTests : IDisposable
         await _manager.RecoverAsync(CancellationToken.None);
 
         _store.Finalized[0].ShouldBe((unfinished.Key, IncidentState.Partial, (BootRecovery?)null));
-        var created = _store.Created.ShouldHaveSingleItem();
+        _store.Created.Count.ShouldBe(2);
+        var created = _store.Created[0];
         created.Title.ShouldBe("Blue screen (bug check 0x00000050)");
         created.Source.ShouldBe(IncidentSource.BootRecovery);
         created.Severity.ShouldBe(Severity.Critical);
         created.CenterAt.ShouldBe(lastBeat);
-        _store.Windows[^1].From.ShouldBe(lastBeat.AddMinutes(-10));
+        _store.Windows[1].From.ShouldBe(lastBeat.AddMinutes(-10));
         _store.Finalized[1].Recovery.ShouldBe(bsod);
-        _store.Marked.ShouldBe([(1L, (long?)created.Id), (2L, null), (3L, null)]);
+
+        // A crash while the recorder only watched is an incident too, without minutes from before (they were in memory).
+        var idle = _store.Created[1];
+        idle.Title.ShouldBe("Blue screen (bug check 0x00000050)");
+        idle.PreWindow.ShouldBe(TimeSpan.Zero);
+        _store.Windows[2].From.ShouldBe(lastBeat);
+        _store.Marked.ShouldBe([(1L, (long?)created.Id), (2L, null), (3L, (long?)idle.Id)]);
+    }
+
+    [Fact]
+    public async Task A_crash_after_the_recorder_had_stopped_is_an_incident_dated_when_windows_came_back()
+    {
+        var stoppedAt = _time.GetUtcNow().AddMinutes(-40);
+        var bootTime = _time.GetUtcNow().AddMinutes(-20);
+        var crash = new BootRecovery(_time.GetUtcNow(), stoppedAt, bootTime, UncleanStopKind.UnexpectedShutdown, false, "Windows restarted without a clean shutdown while the recorder was not running.",
+            new Dictionary<string, string> { [BootRecoveryClassifier.StoppedFirstKey] = stoppedAt.ToString("O", System.Globalization.CultureInfo.InvariantCulture) });
+        _store.Pending.Add(new PendingBootRecovery(4, crash));
+        await _heartbeat.CheckPreviousRunAsync(CancellationToken.None);
+
+        await _manager.RecoverAsync(CancellationToken.None);
+
+        var created = _store.Created.ShouldHaveSingleItem();
+        created.Title.ShouldBe("Unexpected shutdown or restart while the recorder was off");
+        created.Severity.ShouldBe(Severity.High);
+        created.CenterAt.ShouldBe(bootTime);
+        created.PreWindow.ShouldBe(TimeSpan.Zero);
+        _store.Marked.ShouldBe([(4L, (long?)created.Id)]);
     }
 
     [Theory]

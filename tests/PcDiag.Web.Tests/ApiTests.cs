@@ -78,6 +78,7 @@ public sealed class ApiTests : IDisposable
 
         var processes = await client.GetFromJsonAsync<List<PcDiag.Core.Control.ControlProcess>>("/api/v1/control/processes", Json);
         processes!.ShouldHaveSingleItem().Name.ShouldBe("game.exe");
+        (await client.GetStringAsync("/api/v1/control/processes")).ShouldContain("\"steadyCoreSeconds\":75600", Case.Sensitive, "the page's advice reads this name");
 
         var end = await PostAsync(client, "/api/v1/control/processes/1234/end", new { start = 638_000_000_000_000_000, tree = true, confirmed = true });
         end.StatusCode.ShouldBe(HttpStatusCode.OK);

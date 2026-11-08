@@ -72,8 +72,9 @@ public sealed partial class HeartbeatService : BackgroundService
     {
         try
         {
+            // Also after a clean stop: Windows can go down while the recorder is not running, and only its log knows.
             var previous = await _store.ReadAsync(cancellationToken).ConfigureAwait(false);
-            if (previous is null || previous.CleanShutdown)
+            if (previous is null)
             {
                 return;
             }
@@ -100,6 +101,10 @@ public sealed partial class HeartbeatService : BackgroundService
             if (recovery.Kind == UncleanStopKind.WindowsRestarted)
             {
                 LogRecoveryInfo(_logger, id, recovery.Kind, recovery.Summary);
+            }
+            else if (previous.CleanShutdown)
+            {
+                LogCrashWhileStopped(_logger, recovery.Kind, id, recovery.Summary);
             }
             else
             {
@@ -185,6 +190,9 @@ public sealed partial class HeartbeatService : BackgroundService
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Previous run did not stop cleanly: {Kind}; boot recovery #{Id}. {Summary}")]
     private static partial void LogRecoveryInfo(ILogger logger, long id, UncleanStopKind kind, string summary);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Windows went down while the recorder was not running: {Kind}; boot recovery #{Id}. {Summary}")]
+    private static partial void LogCrashWhileStopped(ILogger logger, UncleanStopKind kind, long id, string summary);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Could not read Windows events about the previous shutdown; classifying without them")]
     private static partial void LogEvidenceFailed(ILogger logger, Exception exception);

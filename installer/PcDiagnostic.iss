@@ -23,6 +23,8 @@
 
 #define AppName "PC Diagnostic"
 #define RecorderTask "\PC Diagnostic\Recorder"
+; Set to ask a running recorder (1.0.10 and later) to stop cleanly; see StopReason.ExitEventName.
+#define AgentExitEvent "Local\PcDiagnostic.Agent.Exit"
 #define FirewallTcp "PC Diagnostic dashboard (local network)"
 #define FirewallUdp "PC Diagnostic discovery (local network)"
 
@@ -359,11 +361,39 @@ begin
     ApplyDataChoice;
 end;
 
-{ Running copies hold their files open; an update stops them first (the recorder flushes at most the last seconds). }
+const
+  EventModifyState = $0002;
+
+function OpenEvent(DesiredAccess: Cardinal; InheritHandle: Boolean; Name: String): THandle;
+  external 'OpenEventW@kernel32.dll stdcall';
+function SetEvent(Handle: THandle): Boolean;
+  external 'SetEvent@kernel32.dll stdcall';
+function CloseHandle(Handle: THandle): Boolean;
+  external 'CloseHandle@kernel32.dll stdcall';
+
+{ Asks a running recorder to stop cleanly and waits up to 20 s for it: killed, it lost its last writes and counted as an
+  unexpected stop at its next start. A recorder older than 1.0.10 does not listen; the forced stop after this ends it. }
+procedure StopRecorderCleanly;
+var
+  Handle: THandle;
+  ResultCode: Integer;
+begin
+  Handle := OpenEvent(EventModifyState, False, '{#AgentExitEvent}');
+  if Handle = 0 then
+    Exit;
+  SetEvent(Handle);
+  CloseHandle(Handle);
+  Log('Asked the recorder to stop');
+  Exec(ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe'),
+    '-NoProfile -NonInteractive -Command "Wait-Process -Name PcDiag.Agent -Timeout 20 -ErrorAction SilentlyContinue"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+{ Running copies hold their files open; an update stops them first: cleanly when the recorder listens, by force otherwise. }
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ResultCode: Integer;
 begin
+  StopRecorderCleanly;
   Exec(ExpandConstant('{sys}\schtasks.exe'), '/End /TN "{#RecorderTask}"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM PcDiag.Agent.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM PcDiag.Web.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
@@ -469,6 +499,8 @@ var
 begin
   if CurUninstallStep = usUninstall then
   begin
+    { Before [UninstallRun] ends what is still running by force. }
+    StopRecorderCleanly;
     Drivers := InstalledWindowsDrivers;
     RemoveDrivers := Pos('/REMOVEDRIVERS', Uppercase(GetCmdTail)) > 0;
     if not RemoveDrivers and not UninstallSilent and (PawnIOInstalled or (GetArrayLength(Drivers) > 0)) then

@@ -279,25 +279,29 @@ public sealed partial class IncidentManager : BackgroundService, IIncidentCaptur
         foreach (var pending in await _store.PendingBootRecoveriesAsync(cancellationToken).ConfigureAwait(false))
         {
             var recovery = pending.Recovery;
-            if (!recovery.WasRecording || recovery.Kind is not (UncleanStopKind.BugCheck or UncleanStopKind.UnexpectedShutdown))
+            if (recovery.Kind is not (UncleanStopKind.BugCheck or UncleanStopKind.UnexpectedShutdown))
             {
-                // Not a recorded period, or nothing went wrong with Windows: no incident.
+                // Nothing went wrong with Windows: no incident.
                 await _store.MarkBootRecoveryAsync(pending.Id, null, cancellationToken).ConfigureAwait(false);
                 continue;
             }
 
-            var pre = TimeSpan.FromMinutes(_options.CurrentValue.PreIncidentMinutes);
-            var trigger = new IncidentTrigger(recovery.LastHeartbeat, IncidentSource.BootRecovery, Detail: recovery.Summary);
-            var title = recovery.Kind == UncleanStopKind.BugCheck
+            // Every crash is an incident, recorded or not: watching keeps its minutes in memory only, so those are lost,
+            // and a recorder that had stopped first knows only that Windows came back.
+            var stoppedFirst = recovery.Details.ContainsKey(BootRecoveryClassifier.StoppedFirstKey);
+            var center = stoppedFirst ? recovery.BootTime : recovery.LastHeartbeat;
+            var pre = recovery.WasRecording ? TimeSpan.FromMinutes(_options.CurrentValue.PreIncidentMinutes) : TimeSpan.Zero;
+            var trigger = new IncidentTrigger(center, IncidentSource.BootRecovery, Detail: recovery.Summary);
+            var title = (recovery.Kind == UncleanStopKind.BugCheck
                 ? $"Blue screen (bug check {BugCheckCode(recovery)})"
-                : "Unexpected shutdown or restart";
-            var draft = new IncidentDraft(_timeProvider.GetUtcNow(), recovery.LastHeartbeat, pre, TimeSpan.Zero, IncidentSource.BootRecovery, null, title, null,
-                recovery.Kind == UncleanStopKind.BugCheck ? Severity.Critical : Severity.High, false, trigger, _appVersion);
+                : "Unexpected shutdown or restart") + (stoppedFirst ? " while the recorder was off" : "");
+            var draft = new IncidentDraft(_timeProvider.GetUtcNow(), center, pre, TimeSpan.Zero, IncidentSource.BootRecovery, null, title, null,
+                recovery.Kind == UncleanStopKind.BugCheck ? Severity.Critical : Severity.High, !recovery.WasRecording, trigger, _appVersion);
             var incident = await _store.CreateAsync(draft, cancellationToken).ConfigureAwait(false);
 
             // The recorded minutes before the last heartbeat, and anything stored since (e.g. the boot's Windows events).
-            var end = recovery.DetectedAt > recovery.LastHeartbeat ? recovery.DetectedAt : recovery.LastHeartbeat;
-            await _store.CaptureWindowAsync(incident, recovery.LastHeartbeat - pre, end, [], cancellationToken).ConfigureAwait(false);
+            var end = recovery.DetectedAt > center ? recovery.DetectedAt : center;
+            await _store.CaptureWindowAsync(incident, center - pre, end, [], cancellationToken).ConfigureAwait(false);
             await _store.FinalizeAsync(incident, IncidentState.Complete, recovery, cancellationToken).ConfigureAwait(false);
             await TryAnalyzeAsync(incident, cancellationToken).ConfigureAwait(false);
             await _store.MarkBootRecoveryAsync(pending.Id, incident.Id, cancellationToken).ConfigureAwait(false);

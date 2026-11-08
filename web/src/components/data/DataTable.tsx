@@ -22,6 +22,8 @@ export interface Column<T> extends ViewColumn<T> {
 export interface DataTableProps<T> {
   /** Remembers how the user grouped and sorted this table, in this browser. */
   viewKey: string;
+  /** False: every visit opens with the default view; the user's grouping and sorting last until they leave. */
+  remember?: boolean;
   /** Accessible name of the table or list. */
   label: string;
   rows: readonly T[];
@@ -52,9 +54,10 @@ type Dragged = { from: 'column' | Zone; id: string } | null;
 
 const STORAGE_PREFIX = 'pcdiag.view.';
 
-/** The view remembered for a table, or its default. */
-function useStoredView<T>(key: string, columns: readonly ViewColumn<T>[], fallback: TableView): [TableView, (view: TableView) => void] {
+/** The view remembered for a table, or its default (always the default when it is not remembered). */
+function useStoredView<T>(key: string, columns: readonly ViewColumn<T>[], fallback: TableView, remember: boolean): [TableView, (view: TableView) => void] {
   const [view, setView] = useState<TableView>(() => {
+    if (!remember) return fallback;
     try {
       const raw = window.localStorage.getItem(STORAGE_PREFIX + key);
       return raw ? cleanView(JSON.parse(raw) as TableView, columns, fallback) : fallback;
@@ -65,7 +68,8 @@ function useStoredView<T>(key: string, columns: readonly ViewColumn<T>[], fallba
   const save = (next: TableView) => {
     setView(next);
     try {
-      if (sameView(next, fallback)) window.localStorage.removeItem(STORAGE_PREFIX + key);
+      // Not remembered: also clears what an earlier version remembered.
+      if (!remember || sameView(next, fallback)) window.localStorage.removeItem(STORAGE_PREFIX + key);
       else window.localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(next));
     } catch {
       // Not remembered (private window, storage blocked); the view still applies now.
@@ -82,9 +86,9 @@ function useStoredView<T>(key: string, columns: readonly ViewColumn<T>[], fallba
  * sorting and remembers the user's in this browser; Reset returns to the default.
  */
 export function DataTable<T>(props: DataTableProps<T>) {
-  const { viewKey, label, rows, columns, rowKey, defaultView, renderRow, rowClassName, rowTitle, emptyText, compact, toolbarStart, className, scrollClassName, listClassName, fill } = props;
+  const { viewKey, remember = true, label, rows, columns, rowKey, defaultView, renderRow, rowClassName, rowTitle, emptyText, compact, toolbarStart, className, scrollClassName, listClassName, fill } = props;
   const [fillRef, fillHeight] = useFillHeight<HTMLDivElement>();
-  const [view, setView] = useStoredView(viewKey, columns, defaultView);
+  const [view, setView] = useStoredView(viewKey, columns, defaultView, remember);
   const [open, setOpen] = useState(!compact);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [dragging, setDragging] = useState(false);

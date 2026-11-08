@@ -367,6 +367,8 @@ public sealed partial class LhmSensorProvider : IHardwareSensorProvider, IDispos
             return false;
         }
 
+        // The first update also opens the hardware (the CPU's took 270-370 ms at every start): only later ones count as slow.
+        var first = !_lastUpdate.ContainsKey(hardware.Identifier);
         var started = Stopwatch.GetTimestamp();
         try
         {
@@ -377,7 +379,7 @@ public sealed partial class LhmSensorProvider : IHardwareSensorProvider, IDispos
             }
 
             var elapsed = Stopwatch.GetElapsedTime(started);
-            if (elapsed > TimeSpan.FromMilliseconds(50) && _reportedSlow.Add(hardware.Identifier))
+            if (!first && elapsed > TimeSpan.FromMilliseconds(50) && _reportedSlow.Add(hardware.Identifier))
             {
                 LogSlowHardware(_logger, hardware.Name, hardware.HardwareType.ToString(), elapsed.TotalMilliseconds);
             }

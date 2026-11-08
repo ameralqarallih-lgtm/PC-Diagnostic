@@ -140,6 +140,36 @@ public class BootRecoveryClassifierTests
     }
 
     [Fact]
+    public void A_crash_after_a_clean_stop_is_found_in_the_windows_log()
+    {
+        // The dev PC on 7 Nov 2026: the recorder was closed from the tray at 20:54, Windows froze at 21:13.
+        var clean = Unclean() with { CleanShutdown = true, Recording = false };
+        var events = new[] { E(19, EventCategory.UnexpectedShutdown, "shutdown.unexpected"), E(20, EventCategory.UnexpectedShutdown, "shutdown.unexpected.previous") };
+
+        var recovery = BootRecoveryClassifier.Classify(clean, LastBeat.AddMinutes(20), events, Now).ShouldNotBeNull();
+
+        recovery.Kind.ShouldBe(UncleanStopKind.UnexpectedShutdown);
+        recovery.WasRecording.ShouldBeFalse();
+        recovery.BootTime.ShouldBe(LastBeat.AddMinutes(20));
+        recovery.Details.ShouldContainKey(BootRecoveryClassifier.StoppedFirstKey);
+        recovery.Summary.ShouldContain("while the recorder was not running");
+
+        var bugCheck = BootRecoveryClassifier.Classify(clean, LastBeat.AddMinutes(20),
+            [E(20, EventCategory.BugCheck, "bugcheck", new() { ["bugcheck"] = "0x0000007e (0xffffffffc0000420)" })], Now).ShouldNotBeNull();
+        bugCheck.Kind.ShouldBe(UncleanStopKind.BugCheck);
+        bugCheck.Details["bugcheck"].ShouldStartWith("0x0000007e");
+    }
+
+    [Fact]
+    public void A_clean_stop_and_a_normal_restart_or_an_old_crash_find_nothing()
+    {
+        var clean = Unclean() with { CleanShutdown = true };
+
+        BootRecoveryClassifier.Classify(clean, LastBeat.AddMinutes(5), [E(4, EventCategory.Power, "power.os-shutdown"), E(5, EventCategory.Power, BootRecoveryClassifier.OsStartedRule)], Now).ShouldBeNull();
+        BootRecoveryClassifier.Classify(clean, LastBeat.AddMinutes(5), [E(-1, EventCategory.UnexpectedShutdown, "shutdown.unexpected")], Now).ShouldBeNull();
+    }
+
+    [Fact]
     public void Without_a_restart_only_the_recorder_stopped()
     {
         var recovery = BootRecoveryClassifier.Classify(Unclean(), LastBeat.AddDays(-2), [], Now).ShouldNotBeNull();

@@ -79,6 +79,55 @@ describe('tune-up advice', () => {
     expect(advice.find((a) => a.id === 'cleanup')!.title).toContain('1.5 GB');
   });
 
+  it('asks about a program that has held one core for hours, and does not also call it busy', () => {
+    const script = process({ pid: 5, name: 'python.exe', kind: 'background', cpuPercent: 25, steadyCoreSeconds: 21 * 3600 });
+    const advice = recommend(report(), [script], [], liveSnapshot());
+    const stuck = advice.find((a) => a.id === 'stuck-5')!;
+
+    expect(stuck.level).toBe('medium');
+    expect(stuck.title).toBe('python.exe has used a full CPU core without a break for 21 hours');
+    expect(stuck.action).toMatchObject({ kind: 'apply', action: 'end-processes', items: ['5:638000000000000000'], overSafeMode: true });
+    expect(advice.map((a) => a.id)).not.toContain('busy-background');
+
+    expect(recommend(report(), [process({ ...script, steadyCoreSeconds: 3 * 86400 })], [], liveSnapshot()).find((a) => a.id === 'stuck-5')!.title).toContain('for 3 days');
+  });
+
+  it('says how much GPU memory WSL holds, alone or with its memory', () => {
+    const machine = process({ pid: 40, name: 'vmwp.exe', kind: 'windows', protection: 'Caution', gpuMemoryBytes: 21 * GB });
+    const wsl = (overrides: Partial<TuneUpReport['system']>) => recommend(report(overrides), [machine], [], liveSnapshot()).find((a) => a.id === 'wsl' || a.id === 'vm-gpu');
+
+    expect(wsl({})!.title).toBe('WSL holds 12.0 GB of memory and 21.0 GB of GPU memory');
+    expect(wsl({ wslBytes: 1 * GB })!.title).toBe('WSL holds 21.0 GB of GPU memory');
+    expect(wsl({ wslBytes: 1 * GB })!.action).toMatchObject({ action: 'shutdown-wsl' });
+    // Without WSL, another virtual machine (Hyper-V, Docker).
+    expect(wsl({ wslRunning: false, wslBytes: null })).toMatchObject({ id: 'vm-gpu', title: 'A virtual machine holds 21.0 GB of GPU memory' });
+  });
+
+  it('asks only about programs of your own', () => {
+    const steady = { steadyCoreSeconds: 3 * 3600 };
+    const others = [
+      process({ pid: 1, name: 'vmmemWSL', kind: 'background', ...steady }),
+      process({ pid: 2, name: 'MsMpEng.exe', kind: 'service', protection: 'Protected', ...steady }),
+      process({ pid: 3, name: 'SearchIndexer.exe', kind: 'windows', protection: 'Caution', ...steady }),
+      process({ pid: 4, name: 'database.exe', kind: 'service', ...steady }),
+    ];
+
+    expect(recommend(report(), others, [], liveSnapshot()).filter((a) => a.id.startsWith('stuck-'))).toEqual([]);
+  });
+
+  it('counts a busy background program in cores, the same work on any PC', () => {
+    const worker = process({ pid: 9, name: 'worker.exe', kind: 'background', cpuPercent: 4.2 });
+    const on = (logicalProcessors: number) => {
+      const live = liveSnapshot();
+      return recommend(report(), [worker], [], { ...live, cpu: { ...live.cpu!, logicalProcessors } }).find((a) => a.id === 'busy-background');
+    };
+
+    expect(on(24)!.detail).toContain('worker.exe: 1.0 cores (4.2% of the CPU)');
+    expect(on(4)).toBeUndefined();
+    // Without the live picture the number of cores is not known.
+    expect(recommend(report(), [worker], [], null).find((a) => a.id === 'busy-background')).toBeUndefined();
+  });
+
   it('has nothing to say about a PC in good shape', () => {
     const fine = report({ powerPlans: [{ id: 'a1', name: 'Balanced', active: true }], hibernationEnabled: false, gameMode: true, wslRunning: false, wslBytes: null, volumes: [] }, { cleanup: [] });
     expect(recommend(fine, [process()], [], liveSnapshot())).toEqual([]);
@@ -132,6 +181,25 @@ describe('Tune-up page', () => {
     // What Windows needs cannot be chosen at all.
     await userEvent.keyboard('{Escape}');
     expect(screen.getByRole('checkbox', { name: 'Select lsass.exe (700)' })).toBeDisabled();
+  });
+
+  it('ends a stuck program from the advice although safe mode would call it busy', async () => {
+    const script = process({ pid: 5, name: 'python.exe', kind: 'background', cpuPercent: 4, steadyCoreSeconds: 21 * 3600 });
+    const fetchMock = mockApi({
+      ...common,
+      'GET /api/v1/control/processes': () => [script],
+      'POST /api/v1/tuneup/end-processes': () => ({ ok: true, message: 'Ended 1 process(es).', changed: 1, restartNeeded: false }),
+    });
+    renderApp('/tune-up?tab=advice');
+
+    await screen.findByText('python.exe has used a full CPU core without a break for 21 hours');
+    await userEvent.click(screen.getByRole('button', { name: 'End it' }));
+    const dialog = await screen.findByRole('dialog', { name: 'End it?' });
+    expect(within(dialog).getByText('End python.exe? If it is still doing real work, that work and anything unsaved is lost.')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'End it' }));
+
+    expect(await screen.findByText('Ended 1 process(es).')).toBeInTheDocument();
+    expect(bodyOf(fetchMock, 'POST', '/api/v1/tuneup/end-processes')).toMatchObject({ items: ['5:638000000000000000'], safe: false });
   });
 
   it('cleans the selected targets, the safe ones selected at first', async () => {

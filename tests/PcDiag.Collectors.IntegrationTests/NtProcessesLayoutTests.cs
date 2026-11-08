@@ -39,6 +39,12 @@ public partial class NtProcessesLayoutTests
         found = state.Result;
         self.Refresh();
 
+        // Read now, right after our snapshot: Process reads these at its first use, and the WMI query below starts threads
+        // (57 against 42 under a full test run, Nov 2026).
+        var threads = self.Threads.Count;
+        var handles = self.HandleCount;
+        var workingSet = self.WorkingSet64;
+
         found.ShouldNotBeNull();
         found.Name.ShouldBe(Path.GetFileName(self.MainModule!.FileName), StringCompareShould.IgnoreCase);
 
@@ -62,9 +68,9 @@ public partial class NtProcessesLayoutTests
         found.ReadTransfer.ShouldBeLessThanOrEqualTo((long)io.ReadTransferCount);
 
         // Threads, handles, working set: close to Process (they change between the two reads).
-        found.Threads.ShouldBeInRange(self.Threads.Count - 5, self.Threads.Count + 5);
-        found.Handles.ShouldBeInRange(self.HandleCount - 100, self.HandleCount + 100);
-        found.WorkingSet.ShouldBeInRange(self.WorkingSet64 / 2, self.WorkingSet64 * 2);
+        found.Threads.ShouldBeInRange(threads - 5, threads + 5);
+        found.Handles.ShouldBeInRange(handles - 100, handles + 100);
+        found.WorkingSet.ShouldBeInRange(workingSet / 2, workingSet * 2);
     }
 
     [Fact]

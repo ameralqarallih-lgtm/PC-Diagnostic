@@ -24,6 +24,13 @@ public sealed partial class TriggerService : BackgroundService
     /// <summary>Longest incident title.</summary>
     public const int MaxTitleLength = 120;
 
+    /// <summary>
+    /// How long a GPU memory rule stays quiet about the program that filled the memory last time. Each time is a real episode,
+    /// but the same program again tells nothing new: on the dev PC (Nov 2026) WSL's virtual machine loaded about 21 GB onto the
+    /// GPU roughly every hour and made 15 incidents in 36 hours. Another program still makes one after the rule's cooldown.
+    /// </summary>
+    public static readonly TimeSpan SameHolderQuiet = TimeSpan.FromHours(12);
+
     private readonly AnomalyTriggerChannel _queue;
     private readonly AnomalyEngine _engine;
     private readonly IIncidentCapture _capture;
@@ -31,13 +38,16 @@ public sealed partial class TriggerService : BackgroundService
     private readonly TimeProvider _timeProvider;
     private readonly ILogger<TriggerService> _logger;
     private readonly Dictionary<string, DateTimeOffset> _lastByRule = new(StringComparer.Ordinal);
+    private readonly Dictionary<(string Rule, string Holder), DateTimeOffset> _lastByHolder = [];
     private readonly Queue<DateTimeOffset> _created = new();
     private TriggerOptions _lastGood = new();
+    private readonly Control.ProcessDirectory? _processes;
 
-    /// <summary>Creates the service.</summary>
+    /// <summary>Creates the service; with the process directory, GPU memory incidents name the program holding the most.</summary>
     public TriggerService(AnomalyTriggerChannel queue, AnomalyEngine engine, IIncidentCapture capture, IOptionsMonitor<TriggerOptions> options, TimeProvider timeProvider,
-        ILogger<TriggerService> logger)
+        ILogger<TriggerService> logger, Control.ProcessDirectory? processes = null)
     {
+        _processes = processes;
         _queue = queue;
         _engine = engine;
         _capture = capture;
@@ -68,13 +78,42 @@ public sealed partial class TriggerService : BackgroundService
         Stale,
     }
 
-    /// <summary>The incident title for a trigger, e.g. "Sudden GPU clock drop: 2100 MHz → 300 MHz (−86 % in 2 s)".</summary>
-    public static string TitleFor(AnomalyTrigger trigger)
+    /// <summary>
+    /// The incident title for a trigger, e.g. "Sudden GPU clock drop: 2100 MHz → 300 MHz (−86 % in 2 s)", with the program
+    /// holding the most GPU memory for a GPU memory rule ("…: 98 %; vmwp.exe (a virtual machine) holds 21 GB").
+    /// </summary>
+    public static string TitleFor(AnomalyTrigger trigger, (string Name, long Bytes)? holder = null)
     {
         ArgumentNullException.ThrowIfNull(trigger);
         var device = trigger.Anomaly.Device is { Length: > 0 } d && trigger.Rule.Kind != AnomalyRuleKind.Event ? $" ({d})" : "";
-        var title = $"{trigger.Rule.Name}{device}: {trigger.Anomaly.Reasoning.Current}";
+        var held = holder is { } h ? $"; {h.Name}{(IsVirtualMachine(h.Name) ? " (a virtual machine)" : "")} holds {Gigabytes(h.Bytes)}" : "";
+        var title = $"{trigger.Rule.Name}{device}: {trigger.Anomaly.Reasoning.Current}{held}";
         return title.Length <= MaxTitleLength ? title : string.Concat(title.AsSpan(0, MaxTitleLength - 1), "…");
+    }
+
+    private static bool IsVirtualMachine(string name) => name.Equals("vmwp.exe", StringComparison.OrdinalIgnoreCase);
+
+    private static string Gigabytes(long bytes) =>
+        (bytes / (1024.0 * 1024 * 1024)).ToString(bytes >= 10L << 30 ? "0" : "0.0", System.Globalization.CultureInfo.InvariantCulture) + " GB";
+
+    /// <summary>The program holding the most GPU memory now, for a GPU memory rule; null for other rules or when not known.</summary>
+    private (string Name, long Bytes)? HolderFor(AnomalyRule rule)
+    {
+        if (_processes is null || rule.Metric != AnomalyMetrics.GpuVram)
+        {
+            return null;
+        }
+
+        (string Name, long Bytes)? top = null;
+        foreach (var (metrics, identity) in _processes.Snapshot())
+        {
+            if (_processes.Gpu(metrics.Key.Pid) is { MemoryBytes: > 0 } gpu && (top is null || gpu.MemoryBytes > top.Value.Bytes))
+            {
+                top = (identity?.Name ?? metrics.Name, gpu.MemoryBytes);
+            }
+        }
+
+        return top;
     }
 
     /// <summary>Handles one trigger. Exposed for tests.</summary>
@@ -101,6 +140,13 @@ public sealed partial class TriggerService : BackgroundService
             return Outcome.Cooldown;
         }
 
+        var holder = HolderFor(rule);
+        if (holder is { } h && _lastByHolder.TryGetValue((rule.Id, h.Name), out var sameHolder) && now - sameHolder < SameHolderQuiet)
+        {
+            LogSkipped(_logger, rule.Id, $"{h.Name} held the memory at the incident at {sameHolder:HH:mm:ss} too");
+            return Outcome.Cooldown;
+        }
+
         while (_created.Count > 0 && now - _created.Peek() >= TimeSpan.FromHours(1))
         {
             _created.Dequeue();
@@ -114,9 +160,13 @@ public sealed partial class TriggerService : BackgroundService
         }
 
         var source = rule.Kind == AnomalyRuleKind.Event ? IncidentSource.Event : IncidentSource.Rule;
-        var outcome = await _capture.CaptureAsync(new IncidentTrigger(now, source, RuleId: rule.Id, Detail: TitleFor(trigger), Severity: rule.Severity), cancellationToken)
+        var outcome = await _capture.CaptureAsync(new IncidentTrigger(now, source, RuleId: rule.Id, Detail: TitleFor(trigger, holder), Severity: rule.Severity), cancellationToken)
             .ConfigureAwait(false);
         _lastByRule[rule.Id] = now;
+        if (holder is { } held)
+        {
+            _lastByHolder[(rule.Id, held.Name)] = now;
+        }
         if (!outcome.Merged)
         {
             _created.Enqueue(now);

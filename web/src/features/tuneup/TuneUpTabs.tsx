@@ -619,7 +619,8 @@ export function AdviceTab({ advice, loading, onTab, ask }: { advice: Recommendat
                       confirmLabel: action.label,
                       body: <p>{action.confirm}</p>,
                       danger: action.action === 'end-processes' || action.action === 'shutdown-wsl',
-                      run: (confirmed) => control.mutate({ path: `/tuneup/${action.action}`, body: { items: action.items, value: action.value, confirmed }, label: action.label }),
+                      run: (confirmed) =>
+                        control.mutate({ path: `/tuneup/${action.action}`, body: { items: action.items, value: action.value, confirmed, ...(action.overSafeMode ? { safe: false } : {}) }, label: action.label }),
                     });
                 }}
               >

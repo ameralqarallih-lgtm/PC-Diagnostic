@@ -33,6 +33,7 @@ public enum ControlProtection
 /// <param name="SessionId">Windows session (0 is services).</param>
 /// <param name="Services">Services it hosts.</param>
 /// <param name="StartedAt">When it started.</param>
+/// <param name="SteadyCoreSeconds">How long it has held about one CPU core without a break, once that is hours long (it may be stuck in a loop); otherwise null.</param>
 public sealed record ControlProcess(
     int Pid,
     long StartTicks,
@@ -56,7 +57,8 @@ public sealed record ControlProcess(
     double? GpuPercent = null,
     long? GpuMemoryBytes = null,
     double? NetBytesPerSec = null,
-    double? DiskBytesPerSec = null);
+    double? DiskBytesPerSec = null,
+    double? SteadyCoreSeconds = null);
 
 /// <summary>A Windows service with what can be done with it.</summary>
 /// <param name="Name">Service (key) name.</param>

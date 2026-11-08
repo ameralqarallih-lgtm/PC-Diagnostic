@@ -9,8 +9,11 @@ namespace PcDiag.Collectors.Control;
 /// </summary>
 public sealed class ResourceGuard
 {
-    /// <summary>CPU use from which a process counts as busy (% of the whole PC).</summary>
-    public const double BusyCpuPercent = 2;
+    /// <summary>
+    /// CPU use from which a process counts as busy (% of the whole PC): 0.16 of a core, the same work on any PC. A fixed share was
+    /// 0.08 of a core on 4 threads and half a core on 24, so a program working away counted as idle on a big PC.
+    /// </summary>
+    public static readonly double BusyCpuPercent = PercentOfPc(0.16, Environment.ProcessorCount);
 
     /// <summary>GPU use from which a process counts as using the GPU (%).</summary>
     public const double BusyGpuPercent = 2;
@@ -41,6 +44,9 @@ public sealed class ResourceGuard
         ForegroundPid = foregroundPid;
         _byPid = processes.GroupBy(p => p.Pid).ToDictionary(g => g.Key, g => g.First());
     }
+
+    /// <summary>What a number of CPU cores is as a share of the whole PC, the way a process's CPU use is measured.</summary>
+    public static double PercentOfPc(double cores, int processors) => cores / Math.Max(1, processors) * 100;
 
     /// <summary>The running processes.</summary>
     public IReadOnlyList<ControlProcess> Processes { get; }
@@ -77,7 +83,7 @@ public sealed class ResourceGuard
             return "it is the program in front";
         }
 
-        if (process.CpuPercent is >= BusyCpuPercent)
+        if (process.CpuPercent >= BusyCpuPercent)
         {
             return $"it is busy ({Percent(process.CpuPercent.Value)} CPU)";
         }
@@ -116,7 +122,7 @@ public sealed class ResourceGuard
             return $"it is using the GPU ({Percent(process.GpuPercent.Value)})";
         }
 
-        if (process.CpuPercent is >= BusyCpuPercent)
+        if (process.CpuPercent >= BusyCpuPercent)
         {
             return $"it is busy ({Percent(process.CpuPercent.Value)} CPU)";
         }

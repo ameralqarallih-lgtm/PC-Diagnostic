@@ -69,9 +69,6 @@ public sealed class RecorderOptions
     /// </summary>
     public bool WatchWhenNotRecording { get; set; } = true;
 
-    /// <summary>Whether the Agent starts automatically at logon (applied to the scheduled task).</summary>
-    public bool StartAgentAtLogon { get; set; }
-
     /// <summary>History preserved before an incident, in minutes (1, 5, 10, 15 or 30).</summary>
     public int PreIncidentMinutes { get; set; } = 10;
 

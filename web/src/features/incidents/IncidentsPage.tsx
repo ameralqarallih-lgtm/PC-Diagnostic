@@ -131,15 +131,16 @@ export function IncidentsPage() {
           </CardContent>
         </Card>
       ) : (
+        // Opens ungrouped, newest first, every time; the user groups and sorts from there, by dragging fields as in every list.
         <DataTable
           viewKey="incidents"
+          remember={false}
           label="Incidents"
           rows={data.items}
           columns={INCIDENT_COLUMNS}
           rowKey={(i) => i.key}
           defaultView={{ groupBy: [], sort: [{ id: 'when', desc: true }] }}
           listClassName="gap-2"
-          compact
           renderRow={(incident) => (
             <button type="button" className={ROW} onClick={() => setPeek(incident)}>
               <span className="flex min-w-0 items-center gap-2">
