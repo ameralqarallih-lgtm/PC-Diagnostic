@@ -40,6 +40,14 @@ public sealed partial class LhmSensorProvider : IHardwareSensorProvider, IDispos
     private readonly ILogger<LhmSensorProvider> _logger;
     private readonly Dictionary<Identifier, long> _lastUpdate = [];
     private readonly HashSet<Identifier> _reportedSlow = [];
+
+    /// <summary>
+    /// Updates this soon after the start are not reported as slow: the hardware is still being opened (the CPU's took
+    /// 270-520 ms and the GPU's about 80 ms in the first 10 s of every start on the dev PC, Nov 2026).
+    /// </summary>
+    private static readonly TimeSpan SettleTime = TimeSpan.FromMinutes(1);
+
+    private readonly long _created = Stopwatch.GetTimestamp();
     private readonly Dictionary<Identifier, IReadOnlyList<SensorReading>> _drives = [];
     private readonly CancellationTokenSource _stop = new();
     private Computer? _computer;
@@ -367,8 +375,7 @@ public sealed partial class LhmSensorProvider : IHardwareSensorProvider, IDispos
             return false;
         }
 
-        // The first update also opens the hardware (the CPU's took 270-370 ms at every start): only later ones count as slow.
-        var first = !_lastUpdate.ContainsKey(hardware.Identifier);
+        var settled = Stopwatch.GetElapsedTime(_created) > SettleTime;
         var started = Stopwatch.GetTimestamp();
         try
         {
@@ -379,7 +386,7 @@ public sealed partial class LhmSensorProvider : IHardwareSensorProvider, IDispos
             }
 
             var elapsed = Stopwatch.GetElapsedTime(started);
-            if (!first && elapsed > TimeSpan.FromMilliseconds(50) && _reportedSlow.Add(hardware.Identifier))
+            if (settled && elapsed > TimeSpan.FromMilliseconds(50) && _reportedSlow.Add(hardware.Identifier))
             {
                 LogSlowHardware(_logger, hardware.Name, hardware.HardwareType.ToString(), elapsed.TotalMilliseconds);
             }
