@@ -38,6 +38,9 @@ public static class StorageServiceCollectionExtensions
         services.TryAddSingleton<Telemetry.TelemetryStorageConsumer>();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<Core.Abstractions.ISampleConsumer, Telemetry.TelemetryStorageConsumer>(
             sp => sp.GetRequiredService<Telemetry.TelemetryStorageConsumer>()));
+        services.TryAddSingleton<BlackBox.BlackBoxStore>();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<Core.Abstractions.ISampleConsumer, BlackBox.BlackBoxStore>(sp => sp.GetRequiredService<BlackBox.BlackBoxStore>()));
+        services.TryAddSingleton<Core.Abstractions.IBlackBox>(sp => sp.GetRequiredService<BlackBox.BlackBoxStore>());
         services.TryAddSingleton<Core.Abstractions.IRecorderSessionStore, Telemetry.RecorderSessionStore>();
         services.TryAddSingleton<Core.Abstractions.IAgentHeartbeatStore, Telemetry.AgentHeartbeatStore>();
         services.TryAddSingleton<Telemetry.TelemetryMaintenance>();

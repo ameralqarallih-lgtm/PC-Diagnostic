@@ -5,6 +5,7 @@ import { useState, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useStatus } from '@/features/status/useStatus';
+import { dismissedVersion, dismissVersion, useUpdates } from '@/features/updates/useUpdates';
 import { ApiError } from '@/lib/api/client';
 import type { StorageNotice as StorageNoticeData } from '@/lib/api/types';
 import { EASE } from '@/lib/motion';
@@ -88,6 +89,47 @@ function StorageNotice({ notice }: { notice: StorageNoticeData }) {
         Storage
       </Link>
     </div>
+  );
+}
+
+/** Says so on every page when a newer version is out, until put away for that version. */
+export function UpdateBanner() {
+  const { data } = useUpdates();
+  const [dismissed, setDismissed] = useState(dismissedVersion);
+  const show = data != null && data.newer && data.latest != null && data.latest !== dismissed;
+  return (
+    <Notice show={show}>
+      {show && (
+        <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md border border-accent/40 bg-accent/10 px-3 py-2 text-sm">
+          <span>
+            <strong>PC Diagnostic {data.latest} is available</strong> (this is {data.current.split('+')[0]}).
+            {data.sha256 && <span className="ml-1 text-xs text-muted">SHA-256 of the installer: <span className="font-mono break-all">{data.sha256}</span></span>}
+          </span>
+          <span className="flex shrink-0 items-center gap-3">
+            {data.page && (
+              <a href={data.page} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+                What&apos;s new
+              </a>
+            )}
+            {data.download && (
+              <a href={data.download} className="text-accent hover:underline">
+                Download
+              </a>
+            )}
+            <button
+              type="button"
+              className="text-muted hover:text-foreground"
+              onClick={() => {
+                dismissVersion(data.latest!);
+                setDismissed(data.latest);
+              }}
+            >
+              Not now
+            </button>
+          </span>
+        </div>
+      )}
+    </Notice>
   );
 }
 

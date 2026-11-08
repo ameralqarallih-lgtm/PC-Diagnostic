@@ -1,11 +1,12 @@
 import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DiagnosticJob, FindingEntry, IncidentDetail, IncidentSummary, LanStatus, PeriodReport, SettingsResponse, SignatureStatus, SystemOverview, TimelineEntry, TriggerRuleInfo } from '@/lib/api/types';
+import type { DiagnosticJob, FindingEntry, IncidentDetail, IncidentSummary, LanStatus, PeriodReport, SettingsResponse, SignatureStatus, SystemOverview, TimelineEntry, TriggerRuleInfo, UpdateStatus } from '@/lib/api/types';
 import { bodyOf, confirmIt, mockApi, Problem, queryOf, renderApp } from '@/test/app';
 import { FakeEventSource, statusResponse } from '@/test/fixtures';
 
 const T0 = Date.parse('2026-10-06T12:00:00Z');
+const T0Iso = new Date(T0).toISOString();
 
 const summary: IncidentSummary = {
   key: 'INC-20261006-00007',
@@ -619,6 +620,64 @@ describe('The new look (phase 4)', () => {
       expect(screen.queryByRole('region', { name: 'Recording' })).toBeNull();
       expect(within(topics).getByRole('button', { name: /Sampling/ })).toHaveAttribute('aria-current', 'page');
     }
+  });
+});
+
+describe('Newer versions', () => {
+  const updates = (over: Partial<UpdateStatus> = {}): UpdateStatus => ({
+    available: true, enabled: true, current: '1.0.10+abc', latest: '1.0.11', newer: true, page: 'https://github.com/owner/PC-Diagnostic/releases/tag/v1.0.11',
+    download: 'https://github.com/owner/PC-Diagnostic/releases/download/v1.0.11/PcDiagnostic-Setup-1.0.11.exe', sha256: 'AB'.repeat(32), publishedAt: T0Iso, checkedAt: T0Iso, problem: null,
+    ...over,
+  });
+
+  afterEach(() => localStorage.clear());
+
+  it('says on every page that a newer version is out, until put away for that version', async () => {
+    mockApi({ ...common, 'GET /api/v1/incidents': () => ({ total: 0, items: [] }), 'GET /api/v1/updates': () => updates() });
+    renderApp('/incidents');
+
+    const notice = await screen.findByText(/PC Diagnostic 1\.0\.11 is available/);
+    const banner = notice.closest('[role="status"]') as HTMLElement;
+    expect(banner).toHaveTextContent('(this is 1.0.10)');
+    expect(within(banner).getByRole('link', { name: 'Download' })).toHaveAttribute('href', updates().download!);
+    expect(within(banner).getByRole('link', { name: "What's new" })).toHaveAttribute('href', updates().page!);
+    expect(banner).toHaveTextContent('AB'.repeat(32));
+
+    await userEvent.click(within(banner).getByRole('button', { name: 'Not now' }));
+    await waitFor(() => expect(screen.queryByText(/PC Diagnostic 1\.0\.11 is available/)).toBeNull());
+
+    // Back later: still put away for 1.0.11.
+    cleanup();
+    renderApp('/incidents');
+    await screen.findByRole('heading', { name: 'Incidents' });
+    expect(screen.queryByText(/is available/)).toBeNull();
+  });
+
+  it('asks in Settings › Privacy, and only where the build can ask', async () => {
+    const fetchMock = mockApi({
+      ...common,
+      'GET /api/v1/settings': () => settings,
+      'GET /api/v1/triggers': () => [],
+      'GET /api/v1/updates': () => updates({ newer: false, latest: '1.0.10' }),
+      'POST /api/v1/updates/check': () => updates({ latest: '1.0.11' }),
+    });
+    renderApp('/settings');
+    await openTopic(/Privacy/);
+
+    expect(await screen.findByRole('checkbox', { name: /Check for new versions/ })).toBeChecked();
+    expect(screen.getByRole('status')).toHaveTextContent('This is the latest version (1.0.10).');
+    await userEvent.click(screen.getByRole('button', { name: 'Check now' }));
+    await waitFor(() => expect(screen.getAllByRole('status').some((s) => s.textContent === 'Version 1.0.11 is available.')).toBe(true));
+    expect(fetchMock.mock.calls.some(([url, init]) => String(url) === '/api/v1/updates/check' && init?.method === 'POST')).toBe(true);
+  });
+
+  it('shows nothing about versions in a build that has nowhere to ask', async () => {
+    mockApi({ ...common, 'GET /api/v1/settings': () => settings, 'GET /api/v1/triggers': () => [], 'GET /api/v1/updates': () => updates({ available: false, newer: false }) });
+    renderApp('/settings');
+    await openTopic(/Privacy/);
+
+    await screen.findByRole('checkbox', { name: /Record process command lines/ });
+    expect(screen.queryByRole('checkbox', { name: /Check for new versions/ })).toBeNull();
   });
 });
 

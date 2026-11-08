@@ -123,13 +123,22 @@ public static class AgentCommands
     /// <summary>What the recorder cost in CPU over the last minute, by part.</summary>
     public const string RecorderCost = "recorder-cost";
 
+    /// <summary>Crashes from Windows' log over Args.Value days (default 30), the dump setting and memory tests.</summary>
+    public const string Stability = "stability";
+
+    /// <summary>Sets how many small crash dumps Windows keeps (Args.Value, a number).</summary>
+    public const string StabilityDumps = "stability-dumps";
+
+    /// <summary>Opens Windows Memory Diagnostic.</summary>
+    public const string StabilityMemoryTest = "stability-memory-test";
+
     /// <summary>All commands.</summary>
     public static IReadOnlySet<string> All { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         Status, Start, Stop, Pause, Resume, Capture, Live, Trend, UpdateIncident, DeleteIncident, Catalog,
         ControlProcesses, ControlServices, ProcessAction, ServiceAction, TuneUpScan, TuneUpApply, TuneUpPlan, CleanupFiles, OverlayState, OverlayReload, OverlayIdentify, OverlayArrange, OverlayScreenDrivers, OverlayScreenDriverApprove,
         StorageState, StorageClean, HardwareState, HardwareCheck, RecorderCost, DriverImport, DriverRemove,
-        WindowsDrivers, WindowsDriverImport, WindowsDriverInstall, WindowsDriverRemove,
+        WindowsDrivers, WindowsDriverImport, WindowsDriverInstall, WindowsDriverRemove, Stability, StabilityDumps, StabilityMemoryTest,
     };
 }
 
@@ -207,7 +216,7 @@ public sealed record AgentResponse(
     RecordingCatalog? Catalog = null, IReadOnlyList<ControlProcess>? Processes = null, IReadOnlyList<ControlService>? Services = null, TuneUpReport? TuneUp = null,
     ControlResult? Result = null, Overlay.OverlayState? Overlay = null, Storage.StorageState? Storage = null, Storage.StorageCleanResult? Cleaned = null,
     Devices.HardwareStatus? Hardware = null, IReadOnlyList<Overlay.ScreenDriverInfo>? ScreenDrivers = null, Diagnostics.RecorderCost? Cost = null, Devices.WindowsDriversState? WindowsDrivers = null,
-    Control.OptimizePlan? Plan = null, Control.CleanupListing? CleanupFiles = null);
+    Control.OptimizePlan? Plan = null, Control.CleanupListing? CleanupFiles = null, Stability.StabilityReport? Stability = null);
 
 /// <summary>Recorder and incident status.</summary>
 /// <param name="Version">Agent version.</param>

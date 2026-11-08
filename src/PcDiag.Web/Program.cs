@@ -83,6 +83,15 @@ do
         client.DefaultRequestHeaders.UserAgent.ParseAdd($"PcDiagnostic/{PcDiag.Hosting.ProductInfo.Version}");
     });
     builder.Services.AddSingleton<PcDiag.Web.Characters.WeatherService>();
+    builder.Services.Configure<PcDiag.Web.Updates.UpdateOptions>(builder.Configuration.GetSection(PcDiag.Web.Updates.UpdateOptions.SectionName));
+    builder.Services.AddHttpClient(PcDiag.Web.Updates.UpdateCheck.HttpClientName, client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(20);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd($"PcDiagnostic/{PcDiag.Hosting.ProductInfo.Version}");
+        client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+    });
+    builder.Services.AddSingleton<PcDiag.Web.Updates.UpdateCheck>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<PcDiag.Web.Updates.UpdateCheck>());
     builder.Services.AddHostedService(sp => sp.GetRequiredService<PcDiag.Web.Characters.WeatherService>());
     builder.Services.AddProblemDetails();
     builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
@@ -122,6 +131,8 @@ do
     app.MapAuthEndpoints();
     app.MapLanEndpoints();
     app.MapStatusEndpoints();
+    PcDiag.Web.Updates.UpdateEndpoints.MapUpdateEndpoints(app);
+    app.MapStabilityEndpoints();
     app.MapControlEndpoints();
     app.MapDashboardEndpoints();
     app.MapOverlayEndpoints();

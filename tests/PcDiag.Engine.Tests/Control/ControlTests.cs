@@ -176,6 +176,44 @@ public sealed class ControlCommandTests
         }
     }
 
+    private sealed class FakeStability : PcDiag.Core.Stability.IStability
+    {
+        public List<int> Days { get; } = [];
+
+        public List<int> Kept { get; } = [];
+
+        public Task<PcDiag.Core.Stability.StabilityReport> ReportAsync(int days, CancellationToken cancellationToken)
+        {
+            Days.Add(days);
+            return Task.FromResult(new PcDiag.Core.Stability.StabilityReport(DateTimeOffset.UnixEpoch, null, [], null, []));
+        }
+
+        public string? KeepDumps(int count)
+        {
+            Kept.Add(count);
+            return null;
+        }
+
+        public string? OpenMemoryTest() => null;
+    }
+
+    [Fact]
+    public async Task The_stability_commands_pass_the_checks_with_their_days_and_dump_count()
+    {
+        // The days first went as a trend's minutes, which the checks allow only up to 10: the tab never loaded (found live, Nov 2026).
+        var stability = new FakeStability();
+        var handler = new AgentCommandHandler(new IdleRecorder(), new NoIncidents(), [], [], new StaticOptionsMonitor<RecorderOptions>(new RecorderOptions()), new ElevationInfo(true),
+            new FakeTimeProvider(), NullLogger<AgentCommandHandler>.Instance, stability: stability);
+        Task<AgentResponse> Send(string command, AgentRequestArgs? args) => handler.HandleAsync(new AgentRequest(AgentIpc.ProtocolVersion, "1", command, args), CancellationToken.None);
+
+        (await Send(AgentCommands.Stability, new AgentRequestArgs(Value: "30"))).ShouldSatisfyAllConditions(r => r.Ok.ShouldBeTrue(), r => r.Stability.ShouldNotBeNull());
+        (await Send(AgentCommands.StabilityDumps, new AgentRequestArgs(Value: "50"))).Ok.ShouldBeTrue();
+        (await Send(AgentCommands.StabilityDumps, new AgentRequestArgs(Value: "many"))).Ok.ShouldBeFalse();
+
+        stability.Days.ShouldBe([30, 30]);
+        stability.Kept.ShouldBe([50]);
+    }
+
     private sealed class IdleRecorder : IRecordingControl
     {
         public RecorderState State => RecorderState.Idle;

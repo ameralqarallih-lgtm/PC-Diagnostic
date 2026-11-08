@@ -1,8 +1,8 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DeviceEventInfo, IoDevice, RegisteredDevice, SensorInfo, SystemOverview } from '@/lib/api/types';
-import { mockApi, renderApp } from '@/test/app';
+import type { DeviceEventInfo, IoDevice, RegisteredDevice, SensorInfo, StabilityResponse, SystemOverview } from '@/lib/api/types';
+import { bodyOf, confirmIt, mockApi, renderApp } from '@/test/app';
 import { FakeEventSource, statusResponse } from '@/test/fixtures';
 import { boardMonitor, memoryNotes, ratedSpeed } from './board';
 import { countText, summarize } from './devices';
@@ -151,6 +151,45 @@ describe('Motherboard and Devices tabs', () => {
   it('sums up the register and names device counts naturally', () => {
     expect(summarize(ioDevices)).toEqual({ connected: 2, remembered: 2, problems: 1, disabled: 0, technical: 1 });
     expect([countText('mouse', 2), countText('keyboard', 1), countText('audio', 3)]).toEqual(['2 mice', '1 keyboard', '3 audio devices']);
+  });
+
+  it('lists the crashes Windows logged, each with its incident, and keeps more dumps or tests the memory when asked', async () => {
+    const stability: StabilityResponse = {
+      problem: null,
+      report: {
+        since: '2026-10-09T13:47:57Z', logStarts: null, problem: null, memoryTests: [],
+        dumps: { kept: 5, set: true, folder: 'C:\\WINDOWS\\Minidump', files: 5, bytes: 90 * 2 ** 20 },
+        crashes: [
+          { restarted: '2026-11-07T17:14:24Z', wentDown: '2026-11-07T17:13:30Z', kind: 'PowerButton', bugCheck: null, bugCheckName: null, parameters: null, dumpFile: null, dumpKept: false, module: null,
+            explanation: 'No blue screen: the PC stopped responding and was turned off with the power button.', incidentKey: null },
+          { restarted: '2026-11-05T23:07:48Z', wentDown: '2026-11-05T23:06:54Z', kind: 'BlueScreen', bugCheck: '0x0000007E', bugCheckName: 'SYSTEM_THREAD_EXCEPTION_NOT_HANDLED', parameters: ['0xffffffffc0000420'],
+            dumpFile: 'C:\\WINDOWS\\Minidump\\110626-22375-01.dmp', dumpKept: true, module: 'ntoskrnl.exe', explanation: 'A system thread failed and nothing caught it.', incidentKey: 'INC-20261106-00169' },
+        ],
+      },
+    };
+    const fetchMock = mockApi({
+      'GET /api/v1/status': () => statusResponse(),
+      'GET /api/v1/system': () => system,
+      'GET /api/v1/stability': () => stability,
+      'POST /api/v1/stability/dumps': () => ({ ...stability, report: { ...stability.report!, dumps: { ...stability.report!.dumps!, kept: 50 } } }),
+      'POST /api/v1/stability/memory-test': () => stability,
+    });
+    renderApp('/system?tab=stability');
+
+    expect(await screen.findByText(/went down without shutting down 2 times: 1 blue screen, 1 freeze ended with the power button, 0 other/)).toBeInTheDocument();
+    const crashes = screen.getByRole('list', { name: 'Crashes' });
+    expect(within(crashes).getByText('in ntoskrnl.exe')).toBeInTheDocument();
+    expect(within(crashes).getByRole('link', { name: 'Its incident INC-20261106-00169' })).toHaveAttribute('href', '/incidents/INC-20261106-00169');
+    expect(within(crashes).getByText('No incident: PC Diagnostic did not record this one.')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Keep the last 50' }));
+    await confirmIt();
+    await screen.findByText('Windows now keeps the last 50 crash dumps.');
+    expect(bodyOf(fetchMock, 'POST', '/api/v1/stability/dumps')).toEqual({ keep: 50 });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Test the memory…' }));
+    await confirmIt();
+    await screen.findByText('Windows Memory Diagnostic is open on this PC.');
   });
 
   it('shows the board, its firmware and its monitoring chip with live readings', async () => {

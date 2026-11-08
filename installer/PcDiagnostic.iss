@@ -397,6 +397,9 @@ begin
   Exec(ExpandConstant('{sys}\schtasks.exe'), '/End /TN "{#RecorderTask}"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM PcDiag.Agent.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM PcDiag.Web.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  { Windows' Program Compatibility Assistant keeps a stopped program's file open for a few seconds, and Restart Manager,
+    which cannot close that service, then aborted a silent update (2 of 4 times on the dev PC, Nov 2026). }
+  Sleep(5000);
   Result := '';
 end;
 

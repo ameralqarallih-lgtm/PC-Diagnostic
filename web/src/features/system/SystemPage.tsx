@@ -3,9 +3,10 @@ import { useNavigate, useSearch } from '@tanstack/react-router';
 import { apiGet } from '@/lib/api/client';
 import type { SystemOverview } from '@/lib/api/types';
 import { RecorderOverheadCard } from './RecorderOverheadCard';
+import { StabilityTab } from './StabilityTab';
 import { SystemOverviewView } from './SystemOverviewView';
 
-/** The PC as the recorder sees it now, by topic: overview, hardware, motherboard, devices, drivers, sensors, readings, recorder cost. */
+/** The PC as the recorder sees it now, by topic: overview, hardware, motherboard, devices, drivers, sensors, readings, stability, recorder cost. */
 export function SystemPage() {
   const search = useSearch({ from: '/system' });
   const navigate = useNavigate({ from: '/system' });
@@ -30,7 +31,10 @@ export function SystemPage() {
           overview={data}
           tab={search.tab ?? 'overview'}
           onTab={(tab) => void navigate({ search: tab === 'overview' ? {} : { tab }, replace: true })}
-          extraTabs={[{ id: 'recorder', label: 'Recorder cost', content: <RecorderOverheadCard /> }]}
+          extraTabs={[
+            { id: 'stability', label: 'Stability', content: <StabilityTab /> },
+            { id: 'recorder', label: 'Recorder cost', content: <RecorderOverheadCard /> },
+          ]}
           live
         />
       )}

@@ -295,7 +295,8 @@ public static class StorageMeter
             if (entry is FileInfo file)
             {
                 // telemetry.db, telemetry.db-wal and telemetry.db-shm belong together, as do incidents.db's.
-                var kind = file.Name.StartsWith(telemetry, StringComparison.OrdinalIgnoreCase) ? "telemetry"
+                // The crash black box (blackbox.db, blackbox-previous.db) is a few minutes of the same recording.
+                var kind = file.Name.StartsWith(telemetry, StringComparison.OrdinalIgnoreCase) || file.Name.StartsWith("blackbox", StringComparison.OrdinalIgnoreCase) ? "telemetry"
                     : file.Name.StartsWith(index, StringComparison.OrdinalIgnoreCase) ? "index"
                     : "other";
                 Add(kind, Length(file), 1);

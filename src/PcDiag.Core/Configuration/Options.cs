@@ -69,6 +69,12 @@ public sealed class RecorderOptions
     /// </summary>
     public bool WatchWhenNotRecording { get; set; } = true;
 
+    /// <summary>
+    /// The crash black box: while watching, the latest minutes (<see cref="PreIncidentMinutes"/>, the busiest processes) are
+    /// kept on disk too, so a crash's incident has them; they are in memory otherwise, and a crash loses them.
+    /// </summary>
+    public bool BlackBox { get; set; } = true;
+
     /// <summary>History preserved before an incident, in minutes (1, 5, 10, 15 or 30).</summary>
     public int PreIncidentMinutes { get; set; } = 10;
 
@@ -149,6 +155,12 @@ public sealed class PrivacyOptions
 
     /// <summary>Collect network interface details (names, addresses, link information).</summary>
     public bool CollectNetworkDetails { get; set; } = true;
+
+    /// <summary>
+    /// Once a day, ask where releases are published (GitHub, for the open-source build) whether there is a newer version. The
+    /// request carries nothing but the app's name and version in its User-Agent. A build without a release address never asks.
+    /// </summary>
+    public bool CheckForUpdates { get; set; } = true;
 }
 
 /// <summary>

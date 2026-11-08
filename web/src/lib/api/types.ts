@@ -578,6 +578,8 @@ export interface UserSettings {
     customSelection?: RecordingSelection | null;
     /** While not recording (and not paused), watch for problems in memory; a problem starts a recording. */
     watchWhenNotRecording?: boolean;
+    /** While watching, the latest minutes are kept on disk too, so a crash's incident has them (the crash black box). */
+    blackBox?: boolean;
     preIncidentMinutes: number;
     postIncidentSeconds: number;
     ringBufferMaxMegabytes: number;
@@ -598,6 +600,8 @@ export interface UserSettings {
     captureWifiNetworkNames: boolean;
     collectWindowsEvents: boolean;
     collectNetworkDetails: boolean;
+    /** Once a day, ask GitHub whether there is a newer version (the open-source build only). */
+    checkForUpdates?: boolean;
   };
   agent: { showTrayIcon: boolean; captureHotkey: string; notifyOnCapture: boolean; webHostPath: string | null };
   /** Automatic incident triggers: the user's changes to the shipped rules. */
@@ -1921,4 +1925,61 @@ export interface WindowsDriversState {
   packages: WindowsDriverInfo[];
   /** What the last install did. */
   message: string | null;
+}
+
+/** What is known about a newer version (GET /api/v1/updates). */
+export interface UpdateStatus {
+  /** This build has somewhere to ask (the open-source build). */
+  available: boolean;
+  /** Settings › Privacy lets it ask. */
+  enabled: boolean;
+  current: string;
+  latest: string | null;
+  newer: boolean;
+  /** The release's page on GitHub (what changed). */
+  page: string | null;
+  /** The installer on GitHub. */
+  download: string | null;
+  /** The installer's SHA-256 from the release notes. */
+  sha256: string | null;
+  publishedAt: string | null;
+  checkedAt: string | null;
+  problem: string | null;
+}
+
+export type CrashKind = 'BlueScreen' | 'PowerButton' | 'Unexpected';
+
+/** One time Windows went down without shutting down cleanly, from its own log. */
+export interface CrashRecord {
+  /** When Windows started again (it logs the crash then). */
+  restarted: string;
+  /** When it went down, when Windows recorded it. */
+  wentDown: string | null;
+  kind: CrashKind;
+  bugCheck: string | null;
+  bugCheckName: string | null;
+  parameters: string[] | null;
+  dumpFile: string | null;
+  /** The dump is still there (Windows deletes the oldest beyond its limit). */
+  dumpKept: boolean;
+  /** The module the bug check points at, from the dump. */
+  module: string | null;
+  explanation: string;
+  incidentKey: string | null;
+}
+
+export interface StabilityReport {
+  since: string;
+  /** Where Windows' System log starts, when later than asked. */
+  logStarts: string | null;
+  crashes: CrashRecord[];
+  dumps: { kept: number; set: boolean; folder: string; files: number; bytes: number } | null;
+  memoryTests: { at: string; errorsFound: boolean; message: string }[];
+  problem: string | null;
+}
+
+/** GET /api/v1/stability. */
+export interface StabilityResponse {
+  report: StabilityReport | null;
+  problem: string | null;
 }

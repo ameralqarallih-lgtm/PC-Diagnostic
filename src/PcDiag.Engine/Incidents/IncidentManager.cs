@@ -7,6 +7,7 @@ using PcDiag.Core.Events;
 using PcDiag.Core.Incidents;
 using PcDiag.Core.Recording;
 using PcDiag.Core.Snapshots;
+using PcDiag.Core.Telemetry;
 using PcDiag.Engine.Diagnostics;
 using PcDiag.Engine.Recording;
 using PcDiag.Engine.Telemetry;
@@ -68,6 +69,7 @@ public sealed partial class IncidentManager : BackgroundService, IIncidentCaptur
     private DateTimeOffset _savedUntil;
     private bool _startedRecording;
     private readonly Core.Storage.IStorageGuard? _guard;
+    private readonly IBlackBox? _blackBox;
 
     /// <summary>Creates the manager.</summary>
     public IncidentManager(
@@ -82,8 +84,10 @@ public sealed partial class IncidentManager : BackgroundService, IIncidentCaptur
         IOptionsMonitor<RecorderOptions> options,
         TimeProvider timeProvider,
         ILogger<IncidentManager> logger,
-        Core.Storage.IStorageGuard? guard = null)
+        Core.Storage.IStorageGuard? guard = null,
+        IBlackBox? blackBox = null)
     {
+        _blackBox = blackBox;
         _guard = guard;
         _store = store;
         _ring = ring;
@@ -286,22 +290,36 @@ public sealed partial class IncidentManager : BackgroundService, IIncidentCaptur
                 continue;
             }
 
-            // Every crash is an incident, recorded or not: watching keeps its minutes in memory only, so those are lost,
-            // and a recorder that had stopped first knows only that Windows came back.
+            // Every crash is an incident, recorded or not. A recording's minutes are in telemetry.db; watching kept them in
+            // memory, and the black box on disk (stored now as a watched capture's are); a recorder that had stopped first
+            // knows only that Windows came back.
             var stoppedFirst = recovery.Details.ContainsKey(BootRecoveryClassifier.StoppedFirstKey);
             var center = stoppedFirst ? recovery.BootTime : recovery.LastHeartbeat;
-            var pre = recovery.WasRecording ? TimeSpan.FromMinutes(_options.CurrentValue.PreIncidentMinutes) : TimeSpan.Zero;
+            var preWanted = TimeSpan.FromMinutes(_options.CurrentValue.PreIncidentMinutes);
+            var end = recovery.DetectedAt > center ? recovery.DetectedAt : center;
+            IReadOnlyList<SampleFrame> kept = [];
+            if (!recovery.WasRecording && !stoppedFirst && _blackBox is not null)
+            {
+                kept = await _blackBox.ReadPreviousAsync(center - preWanted, end, cancellationToken).ConfigureAwait(false);
+                await _bus.PublishBackfillAsync(kept, cancellationToken).ConfigureAwait(false);
+            }
+
+            var history = recovery.WasRecording || kept.Count > 0;
+            var pre = history ? preWanted : TimeSpan.Zero;
             var trigger = new IncidentTrigger(center, IncidentSource.BootRecovery, Detail: recovery.Summary);
             var title = (recovery.Kind == UncleanStopKind.BugCheck
                 ? $"Blue screen (bug check {BugCheckCode(recovery)})"
                 : "Unexpected shutdown or restart") + (stoppedFirst ? " while the recorder was off" : "");
             var draft = new IncidentDraft(_timeProvider.GetUtcNow(), center, pre, TimeSpan.Zero, IncidentSource.BootRecovery, null, title, null,
-                recovery.Kind == UncleanStopKind.BugCheck ? Severity.Critical : Severity.High, !recovery.WasRecording, trigger, _appVersion);
+                recovery.Kind == UncleanStopKind.BugCheck ? Severity.Critical : Severity.High, !history, trigger, _appVersion);
             var incident = await _store.CreateAsync(draft, cancellationToken).ConfigureAwait(false);
 
             // The recorded minutes before the last heartbeat, and anything stored since (e.g. the boot's Windows events).
-            var end = recovery.DetectedAt > center ? recovery.DetectedAt : center;
-            await _store.CaptureWindowAsync(incident, center - pre, end, [], cancellationToken).ConfigureAwait(false);
+            await _store.CaptureWindowAsync(incident, center - pre, end, kept, cancellationToken).ConfigureAwait(false);
+            if (kept.Count > 0)
+            {
+                LogBlackBoxUsed(_logger, incident.Key.ToString(), kept.Count, kept[0].Timestamp, kept[^1].Timestamp);
+            }
             await _store.FinalizeAsync(incident, IncidentState.Complete, recovery, cancellationToken).ConfigureAwait(false);
             await TryAnalyzeAsync(incident, cancellationToken).ConfigureAwait(false);
             await _store.MarkBootRecoveryAsync(pending.Id, incident.Id, cancellationToken).ConfigureAwait(false);
@@ -509,6 +527,9 @@ public sealed partial class IncidentManager : BackgroundService, IIncidentCaptur
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Incident {Key} created for the previous run: {Title}")]
     private static partial void LogBootRecoveryIncident(ILogger logger, string key, string title);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Incident {Key} has {Frames} frames from the crash black box ({From:HH:mm:ss}–{To:HH:mm:ss} UTC)")]
+    private static partial void LogBlackBoxUsed(ILogger logger, string key, int frames, DateTimeOffset from, DateTimeOffset to);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Incident {Key} could not be finished")]
     private static partial void LogFinalizeFailed(ILogger logger, Exception exception, string key);

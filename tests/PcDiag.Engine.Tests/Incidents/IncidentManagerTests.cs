@@ -467,6 +467,57 @@ public sealed class IncidentManagerTests : IDisposable
         _store.Marked.ShouldBe([(1L, (long?)created.Id), (2L, null), (3L, (long?)idle.Id)]);
     }
 
+    private sealed class FakeBlackBox(IReadOnlyList<SampleFrame> frames) : IBlackBox
+    {
+        public List<(DateTimeOffset Since, DateTimeOffset Until)> Asked { get; } = [];
+
+        public Task<IReadOnlyList<SampleFrame>> ReadPreviousAsync(DateTimeOffset since, DateTimeOffset until, CancellationToken cancellationToken)
+        {
+            Asked.Add((since, until));
+            return Task.FromResult<IReadOnlyList<SampleFrame>>([.. frames.Where(f => f.Timestamp >= since && f.Timestamp <= until)]);
+        }
+    }
+
+    [Fact]
+    public async Task A_crash_while_watching_keeps_the_minutes_from_the_black_box()
+    {
+        var lastBeat = _time.GetUtcNow().AddMinutes(-20);
+        var kept = Enumerable.Range(0, 600).Select(s => new SampleFrame(s, lastBeat.AddSeconds(s - 590), Recorded: false, Watched: true)).ToList();
+        var blackBox = new FakeBlackBox(kept);
+        var bus = EngineFactory.Bus();
+        using var manager = new IncidentManager(_store, _ring, bus, _recorder, _heartbeat, FakeEvidenceSource.Diagnostics(_store, _time), [], [], _options, _time,
+            NullLogger<IncidentManager>.Instance, blackBox: blackBox);
+        var crash = new BootRecovery(_time.GetUtcNow(), lastBeat, lastBeat.AddMinutes(2), UncleanStopKind.BugCheck, false, "Windows restarted after a bug check (0x0000001e).",
+            new Dictionary<string, string> { ["bugcheck"] = "0x0000001e (0xffffffffc0000005)" });
+        _store.Pending.Add(new PendingBootRecovery(5, crash));
+        await _heartbeat.CheckPreviousRunAsync(CancellationToken.None);
+
+        await manager.RecoverAsync(CancellationToken.None);
+
+        var created = _store.Created.ShouldHaveSingleItem();
+        created.Title.ShouldBe("Blue screen (bug check 0x0000001e)");
+        created.PreWindow.ShouldBe(TimeSpan.FromMinutes(10));
+        blackBox.Asked.ShouldHaveSingleItem().Since.ShouldBe(lastBeat.AddMinutes(-10));
+        var window = _store.Windows.ShouldHaveSingleItem();
+        window.From.ShouldBe(lastBeat.AddMinutes(-10));
+        window.Frames.ShouldBe(600, "the 10 seconds after the last heartbeat too: the crash came after it");
+    }
+
+    [Fact]
+    public async Task A_crash_while_watching_without_a_black_box_has_no_minutes_from_before()
+    {
+        var lastBeat = _time.GetUtcNow().AddMinutes(-20);
+        using var manager = new IncidentManager(_store, _ring, EngineFactory.Bus(), _recorder, _heartbeat, FakeEvidenceSource.Diagnostics(_store, _time), [], [], _options, _time,
+            NullLogger<IncidentManager>.Instance, blackBox: new FakeBlackBox([]));
+        _store.Pending.Add(new PendingBootRecovery(6, new BootRecovery(_time.GetUtcNow(), lastBeat, lastBeat.AddMinutes(2), UncleanStopKind.UnexpectedShutdown, false, "x",
+            new Dictionary<string, string>())));
+        await _heartbeat.CheckPreviousRunAsync(CancellationToken.None);
+
+        await manager.RecoverAsync(CancellationToken.None);
+
+        _store.Created.ShouldHaveSingleItem().PreWindow.ShouldBe(TimeSpan.Zero);
+    }
+
     [Fact]
     public async Task A_crash_after_the_recorder_had_stopped_is_an_incident_dated_when_windows_came_back()
     {

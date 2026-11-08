@@ -136,7 +136,7 @@ Recording modes: **Manual**, **Always**, **Scheduled**, or a **custom recording*
 <summary><img src="docs/icons/siren.svg" width="18" height="18" alt=""> <b>Incidents, rules and findings</b></summary>
 
 - **Capture** from the global hotkey <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd> (works in full-screen games), the tray icon, the dashboard's buttons (*Screen Flicker*, *Game Crash*, *Slowdown*…) or the command line.
-- **Automatic incidents** from transparent anomaly rules (sudden GPU clock drops, VRAM full for minutes, CPU at 100 %, a disk stalling, a driver reset…) and from blue screens or unexpected shutdowns.
+- **Automatic incidents** from transparent anomaly rules (sudden GPU clock drops, VRAM full for minutes, CPU at 100 %, a disk stalling, a driver reset…) and from every blue screen or unexpected shutdown. A **crash black box** keeps the last minutes on disk while the recorder only watches, so a crash's incident still has the minutes before it.
 - Each incident gets **its own self-contained folder**: the minutes before (default 10) and after (default 2), every process, snapshots of hardware, drivers and displays, and a timeline.
 - **Findings** grade what stood out and quote the numbers; they suggest what to check, never invent a cause.
 - **Reports** as HTML or PDF (quick or technical), and **exports** as CSV, JSON or ZIP.
@@ -159,6 +159,7 @@ Recording modes: **Manual**, **Always**, **Scheduled**, or a **custom recording*
 <summary><img src="docs/icons/wrench.svg" width="18" height="18" alt=""> <b>System, tune-up and more</b></summary>
 
 - **System**: hardware, motherboard, devices, drivers (with signatures), every sensor, and why a reading is unavailable.
+- **Stability**: every crash Windows logged in the last 30 days, also those not recorded: blue screens with their code in plain words and the module their dump points at (no debugger needed), freezes ended with the power button, how many crash dumps Windows keeps, and Windows' memory test.
 - **Drivers**: install Windows drivers for devices that have none, and keep driver packages.
 - **Tune-up**: advice from what the PC is really doing, startup programs, services and safe clean-up.
 - **Access from other devices** (off by default): view the dashboard from your phone or another PC on your network, with pairing codes and HTTPS; an **Android companion app** is included.
@@ -418,7 +419,7 @@ Exit codes: `0` done, `1` refused, `4` recorder not running, `64` usage error.
 
 ### 7. Your data
 
-Everything is in `%LOCALAPPDATA%\PcDiagnostic`. Sensitive collection (command lines, user names, Wi-Fi names) is **off by default**. Uninstalling keeps your recordings unless you ask to remove them.
+Everything is in `%LOCALAPPDATA%\PcDiagnostic`. Sensitive collection (command lines, user names, Wi-Fi names) is **off by default**. Uninstalling keeps your recordings unless you ask to remove them. Once a day the dashboard asks GitHub whether a newer version is out and says so on every page; the request carries only the app's name and version, and *Settings › Privacy › Check for new versions* turns it off.
 
 ---
 

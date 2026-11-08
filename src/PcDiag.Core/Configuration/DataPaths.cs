@@ -29,6 +29,12 @@ public sealed class DataPaths
     /// <summary>Rolling telemetry database (disposable; rebuilt if corrupt).</summary>
     public string TelemetryDatabase => Path.Combine(Root, "telemetry.db");
 
+    /// <summary>The crash black box: the latest watched minutes (rolling, a few MB).</summary>
+    public string BlackBoxDatabase => Path.Combine(Root, "blackbox.db");
+
+    /// <summary>The previous run's black box, moved aside at the start so a crash's incident can still read it.</summary>
+    public string PreviousBlackBoxDatabase => Path.Combine(Root, "blackbox-previous.db");
+
     /// <summary>Incident index database (precious; never deleted automatically).</summary>
     public string IncidentIndexDatabase => Path.Combine(Root, "incidents.db");
 

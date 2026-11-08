@@ -7,7 +7,7 @@ import { ReportingConsentBanner, ReportProblemButton } from '@/features/reports/
 import { applyDensity, loadDensity, useDensity } from '@/lib/look';
 import { loadTheme, switchTheme } from '@/lib/theme';
 import { cn } from '@/lib/utils';
-import { Brand, HardwareBanner, NAV_ITEMS, RecorderBadge, StorageBanner, ThemeToggle, useLive } from './AppShell';
+import { Brand, HardwareBanner, NAV_ITEMS, RecorderBadge, StorageBanner, ThemeToggle, UpdateBanner, useLive } from './AppShell';
 import { CommandPalette, useSettingsItems, type PaletteItem } from './CommandPalette';
 
 type To = (typeof NAV_ITEMS)[number]['to'];
@@ -91,6 +91,7 @@ export function ShellV2() {
         <main id="main" className="mx-auto w-full max-w-[160rem] flex-1 px-4 pb-24 pt-4 md:pb-8 lg:px-6">
           <StorageBanner />
           <HardwareBanner />
+          <UpdateBanner />
           <ReportingConsentBanner />
           <Outlet />
         </main>

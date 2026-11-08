@@ -29,6 +29,7 @@ import { cn } from '@/lib/utils';
 import { AddressSection } from './AddressSection';
 import { LanSection } from './LanSection';
 import { ReportsSection } from './ReportsSection';
+import { useCheckUpdates, useUpdates } from '@/features/updates/useUpdates';
 import { GROUPS, matches, SECTIONS } from './sections';
 import { DEFAULT_TRIGGERS, TriggersSection } from './TriggersSection';
 
@@ -206,6 +207,14 @@ export function SettingsPage() {
                 checked={draft.recorder.watchWhenNotRecording ?? true}
                 onChange={(v) => update('recorder', { watchWhenNotRecording: v })}
               />
+              {(draft.recorder.watchWhenNotRecording ?? true) && (
+                <ToggleRow
+                  label="Crash black box"
+                  help="While watching, the latest minutes (as many as are kept before an incident, with the busiest programs) are also written to disk as they happen, so a crash or a frozen PC still has them in its incident. It writes about 11 KB a second (about 1 GB a day) and keeps up to about 15 MB. Without it, a crash loses them: they are only in memory."
+                  checked={draft.recorder.blackBox ?? true}
+                  onChange={(v) => update('recorder', { blackBox: v })}
+                />
+              )}
               {draft.recorder.mode === 'Scheduled' && (
                 <div className="pb-3">
                   <ScheduleEditor schedule={draft.recorder.schedule} onChange={(schedule) => update('recorder', { schedule })} />
@@ -281,6 +290,7 @@ export function SettingsPage() {
               <ToggleRow label="Record Wi-Fi network names" help="The name of the network you are connected to." checked={draft.privacy.captureWifiNetworkNames} onChange={(v) => update('privacy', { captureWifiNetworkNames: v })} />
               <ToggleRow label="Collect Windows events" help="Driver resets, crashes, blue screens, disk errors and more, classified by the event rules." checked={draft.privacy.collectWindowsEvents} onChange={(v) => update('privacy', { collectWindowsEvents: v })} />
               <ToggleRow label="Collect network details" help="Adapters, link speed and Wi-Fi signal." checked={draft.privacy.collectNetworkDetails} onChange={(v) => update('privacy', { collectNetworkDetails: v })} />
+              <UpdatesRow checked={draft.privacy.checkForUpdates ?? true} onChange={(v) => update('privacy', { checkForUpdates: v })} />
             </Section>
           )}
 
@@ -439,6 +449,38 @@ function NumberRow({ label, help, unit, min, max, step = 1, value, onChange }: {
 }
 
 /** A setting that is on or off: the whole row toggles it. */
+/** Whether to ask GitHub for a newer version, with what the last check found (a build without a release address shows nothing). */
+function UpdatesRow({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  const { data } = useUpdates();
+  const check = useCheckUpdates();
+  if (!data?.available) return null;
+  const found = data.problem
+    ? `The last check did not work: ${data.problem}.`
+    : data.checkedAt == null
+      ? 'Not checked yet.'
+      : data.newer
+        ? `Version ${data.latest} is available.`
+        : `This is the latest version (${data.current.split('+')[0]}).`;
+  return (
+    <div className="flex flex-col gap-1">
+      <ToggleRow
+        label="Check for new versions"
+        help="Once a day, asks GitHub for the latest release and says so when there is a newer one. The request carries only the app's name and version; nothing recorded leaves this PC, and nothing is installed by itself."
+        checked={checked}
+        onChange={onChange}
+      />
+      {data.enabled && (
+        <div className="flex flex-wrap items-center gap-3 pb-2 text-xs text-muted">
+          <span role="status">{found}</span>
+          <Button size="sm" variant="outline" disabled={check.isPending} onClick={() => check.mutate()}>
+            {check.isPending ? 'Checking…' : 'Check now'}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ToggleRow({ label, help, checked, onChange }: { label: string; help?: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <label className="flex cursor-pointer items-start justify-between gap-6 py-3">

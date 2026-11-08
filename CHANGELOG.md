@@ -3,6 +3,28 @@
 All notable changes to PC Diagnostic & Incident Recorder. Each release's installer is on the
 [releases page](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases).
 
+## [1.0.11] - 2026-11-08
+
+### Added
+- **A crash black box.** While the recorder only watches (the default Manual mode), its minutes were in memory and a
+  crash lost them: none of one PC's 12 crashes in 30 days had any data from before it. The watched minutes are now also
+  written to disk as they come (the busiest programs with their names, about 11 KB a second, up to about 15 MB), so a
+  crash's incident has the minutes before it. *Settings › Recording › Crash black box*, on by default.
+  ([#20](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/20))
+- **System › Stability**: every time Windows went down uncleanly in the last 30 days, from its own log, also the crashes
+  PC Diagnostic did not record: blue screens with their code in plain words and the module their dump points at (read
+  without a debugger), freezes ended with the power button, and other unexpected shutdowns, each linked to its incident.
+  It shows how many crash dumps Windows keeps (5 by default, so older ones are lost) with *Keep the last 50*, and Windows
+  Memory Diagnostic's results with *Test the memory…*. ([#22](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/22))
+- **A newer version is shown on every page**, with its release page, installer and SHA-256, until put away for that
+  version. Once a day the app asks GitHub for the latest release; *Settings › Privacy › Check for new versions* turns it
+  off. Nothing is installed by itself. ([#21](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/21))
+
+### Fixed
+- **A silent update could abort** when Windows' Program Compatibility Assistant still held one of the program's files
+  after the recorder stopped (Restart Manager cannot close that service). The installer now waits a few seconds first.
+  ([#23](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/23))
+
 ## [1.0.10] - 2026-11-08
 
 ### Fixed

@@ -74,6 +74,16 @@ public interface IAgentHeartbeatStore
     Task<long> RecordBootRecoveryAsync(Recording.BootRecovery recovery, CancellationToken cancellationToken);
 }
 
+/// <summary>The crash black box: the watched minutes kept on disk, read back after the previous run ended badly.</summary>
+public interface IBlackBox
+{
+    /// <summary>
+    /// The previous run's watched frames between two times, oldest first; empty when there are none. While the recorder
+    /// only watches, its minutes are in memory and a crash loses them; the black box keeps the latest ones on disk too.
+    /// </summary>
+    Task<IReadOnlyList<Telemetry.SampleFrame>> ReadPreviousAsync(DateTimeOffset since, DateTimeOffset until, CancellationToken cancellationToken);
+}
+
 /// <summary>Windows events that explain how a previous run ended (Kernel-Power 41, EventLog 6008, bug check, shutdown requests).</summary>
 public interface IBootEvidenceSource
 {

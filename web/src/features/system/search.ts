@@ -7,7 +7,7 @@ export interface SystemSearch {
   tab?: SystemTab;
 }
 
-const TABS: readonly string[] = [...SYSTEM_TABS, 'recorder'];
+const TABS: readonly string[] = [...SYSTEM_TABS, 'stability', 'recorder'];
 
 /** Validates ?tab= so a shared address always opens a tab that exists. */
 export function parseSystemSearch(search: Record<string, unknown>): SystemSearch {

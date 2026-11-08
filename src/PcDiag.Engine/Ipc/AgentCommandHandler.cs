@@ -49,6 +49,7 @@ public sealed partial class AgentCommandHandler
     private readonly Core.Storage.IStorageControl? _storage;
     private readonly Core.Devices.IHardwareWatch? _hardware;
     private readonly Core.Devices.IWindowsDrivers? _windowsDrivers;
+    private readonly Core.Stability.IStability? _stability;
 
     /// <summary>Longest service name.</summary>
     private const int MaxServiceNameLength = 256;
@@ -68,9 +69,11 @@ public sealed partial class AgentCommandHandler
     public AgentCommandHandler(IRecordingControl recorder, IIncidentCapture capture, IEnumerable<LiveFeed> live, IEnumerable<AnomalyEngine> anomalies, IOptionsMonitor<RecorderOptions> options,
         ElevationInfo elevation, TimeProvider timeProvider, ILogger<AgentCommandHandler> logger, IEnumerable<EnhancedModeService>? enhanced = null,
         ISystemControl? control = null, Core.Overlay.IOverlayControl? overlay = null,
-        Core.Storage.IStorageControl? storage = null, Core.Devices.IHardwareWatch? hardware = null, Core.Devices.IWindowsDrivers? windowsDrivers = null)
+        Core.Storage.IStorageControl? storage = null, Core.Devices.IHardwareWatch? hardware = null, Core.Devices.IWindowsDrivers? windowsDrivers = null,
+        Core.Stability.IStability? stability = null)
     {
         _windowsDrivers = windowsDrivers;
+        _stability = stability;
         _storage = storage;
         _hardware = hardware;
         _control = control;
@@ -197,6 +200,11 @@ public sealed partial class AgentCommandHandler
                 return await WindowsDriversAsync(id, request.Command, request.Args, cancellationToken).ConfigureAwait(false);
             }
 
+            if (request.Command is AgentCommands.Stability or AgentCommands.StabilityDumps or AgentCommands.StabilityMemoryTest)
+            {
+                return await StabilityAsync(id, request.Command, request.Args, cancellationToken).ConfigureAwait(false);
+            }
+
             if (request.Command == AgentCommands.RecorderCost)
             {
                 return new AgentResponse(id, true, Status: Status(), Cost: Core.Diagnostics.CostMeter.Latest);
@@ -232,6 +240,36 @@ public sealed partial class AgentCommandHandler
             LogCommandFailed(_logger, ex, request.Command);
             return new AgentResponse(id, false, $"The {request.Command} command failed.", Status());
         }
+    }
+
+    /// <summary>The Stability tab: crashes from Windows' log, and changing what helps find their cause (administrator only).</summary>
+    private async Task<AgentResponse> StabilityAsync(string id, string command, AgentRequestArgs? args, CancellationToken cancellationToken)
+    {
+        if (_stability is null)
+        {
+            return new AgentResponse(id, false, "This recorder does not read Windows' crash records.", Status());
+        }
+
+        if (command != AgentCommands.Stability)
+        {
+            if (!_elevation.IsElevated)
+            {
+                return new AgentResponse(id, false, "This needs the recorder to run as administrator.", Status());
+            }
+
+            var problem = command == AgentCommands.StabilityDumps
+                ? int.TryParse(args?.Value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var count) ? _stability.KeepDumps(count) : "A number of dumps is required."
+                : _stability.OpenMemoryTest();
+            if (problem is not null)
+            {
+                return new AgentResponse(id, false, problem, Status());
+            }
+        }
+
+        // The days come as Args.Value: Args.TrendMinutes is checked as a live trend's minutes (1–10).
+        var days = command == AgentCommands.Stability && int.TryParse(args?.Value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var asked) ? asked : 30;
+        var report = await _stability.ReportAsync(days, cancellationToken).ConfigureAwait(false);
+        return new AgentResponse(id, true, Status: Status(), Stability: report);
     }
 
     /// <summary>The on-screen display (the recorder draws it on the desktop it runs on).</summary>
