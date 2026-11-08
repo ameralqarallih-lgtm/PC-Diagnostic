@@ -4,7 +4,7 @@
 
 <br>
 
-[![Download](https://img.shields.io/badge/Download-v1.0.9%20installer-38bdf8?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/download/v1.0.9/PcDiagnostic-Setup-1.0.9.exe)
+[![Download](https://img.shields.io/badge/Download-v1.0.10%20installer-38bdf8?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/download/v1.0.10/PcDiagnostic-Setup-1.0.10.exe)
 
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 ![Windows 10 / 11](https://img.shields.io/badge/Windows-10%20%7C%2011%20x64-0078D4?logo=windows&logoColor=white)
@@ -58,11 +58,11 @@ PC Diagnostic records **all the time**, at a cost it shows you (it slows itself 
 <tr>
 <td width="70%">
 
-### PC Diagnostic **v1.0.9** for Windows 10/11 (x64)
+### PC Diagnostic **v1.0.10** for Windows 10/11 (x64)
 
-<img src="docs/icons/download.svg" width="18" height="18" alt=""> **[PcDiagnostic-Setup-1.0.9.exe](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/download/v1.0.9/PcDiagnostic-Setup-1.0.9.exe)** (197 MB) · [all releases](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases) · [what changed](CHANGELOG.md)
+<img src="docs/icons/download.svg" width="18" height="18" alt=""> **[PcDiagnostic-Setup-1.0.10.exe](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/download/v1.0.10/PcDiagnostic-Setup-1.0.10.exe)** (197 MB) · [all releases](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases) · [what changed](CHANGELOG.md)
 
-SHA-256: `3325234EFC947B03357E5F14006F9347D17662F79CF9901AE825C719FAF81C72`
+SHA-256: `F933698A98A88F96B29F7140EAE3D4FF7DB5FB0229079FD710DF88C2B6044589`
 
 One installer, nothing else to install: the .NET runtime is inside, and the sensor driver (PawnIO) is offered during setup.
 
@@ -80,7 +80,7 @@ One installer, nothing else to install: the .NET runtime is inside, and the sens
 </table>
 
 > [!NOTE]
-> The installer is not code-signed yet, so Windows SmartScreen may say *"Windows protected your PC"*. Choose **More info → Run anyway**, or check the SHA-256 above first (`Get-FileHash .\PcDiagnostic-Setup-1.0.9.exe`).
+> The installer is not code-signed yet, so Windows SmartScreen may say *"Windows protected your PC"*. Choose **More info → Run anyway**, or check the SHA-256 above first (`Get-FileHash .\PcDiagnostic-Setup-1.0.10.exe`).
 
 ---
 
@@ -367,7 +367,7 @@ The installer build reads every package it ships, writes `THIRD-PARTY-NOTICES.tx
 
 ### 1. Install and first start
 
-1. Run **PcDiagnostic-Setup-1.0.9.exe** and keep the recommended options:
+1. Run **PcDiagnostic-Setup-1.0.10.exe** and keep the recommended options:
    - **Start the recorder when I sign in**: a scheduled task starts it with administrator rights, without a UAC prompt each time.
    - **Install the PawnIO driver**: needed for CPU temperature and power.
    - *Let my other devices reach the dashboard* is optional (a firewall rule for your local network only).
@@ -455,7 +455,7 @@ cd web; npm run dev                     # http://localhost:5173
 ### Build the installer
 
 ```powershell
-installer\build.ps1 -Version 1.0.9                          # artifacts\installer\PcDiagnostic-Setup-1.0.9.exe
+installer\build.ps1 -Version 1.0.10                         # artifacts\installer\PcDiagnostic-Setup-1.0.10.exe
 installer\build.ps1 -CertificateThumbprint <sha1>           # also signs the programs and the installer
 ```
 
