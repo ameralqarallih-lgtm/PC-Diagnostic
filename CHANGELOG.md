@@ -33,8 +33,7 @@ All notable changes to PC Diagnostic & Incident Recorder. Each release's install
   sent the screen one in the last 25 ms (that frame shows the characters where they are); before, each made its own, up
   to 50 a second for a screen that showed about 30. ([#19](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/19))
 - The unused `Recorder:StartAgentAtLogon` setting is removed (the installer's *Start the recorder when I sign in* option
-  decides), and a collector's slow first run and a sensor's first update at each start are no longer logged as warnings
-  (about 14 at every start).
+  decides), and a collector's slow first run at each start is no longer logged as a warning (12 at every start).
 
 ### Added
 - **Tune-up notices a program stuck in a loop.** A program of your own that has held about one CPU core (0.8 to 1.2)
