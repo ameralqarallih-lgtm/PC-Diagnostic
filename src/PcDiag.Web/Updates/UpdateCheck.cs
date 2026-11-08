@@ -16,7 +16,7 @@ public sealed class UpdateOptions
 
     /// <summary>
     /// The latest-release address (GitHub's API, e.g. https://api.github.com/repos/owner/repo/releases/latest). Empty: this build
-    /// never checks (a build sold with a license is updated another way).
+    /// never checks.
     /// </summary>
     public string? Releases { get; set; }
 }
