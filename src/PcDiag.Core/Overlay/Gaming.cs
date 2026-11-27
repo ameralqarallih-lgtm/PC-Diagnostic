@@ -7,7 +7,9 @@ namespace PcDiag.Core.Overlay;
 /// <param name="FrameTimeMs">Average time between frames over the last second.</param>
 /// <param name="Low1Fps">The 1 % low: the frame rate of the slowest 1 % of frames over the last 30 s (null until there are enough).</param>
 /// <param name="Foreground">The app is the one in front.</param>
-public sealed record FrameStats(int ProcessId, string? ProcessName, double Fps, double FrameTimeMs, double? Low1Fps, bool Foreground);
+/// <param name="WorstFrameTimeMs">The longest time between two frames in the last second.</param>
+/// <param name="Stutters">Frames in the last second far longer than the frames around them (hitches).</param>
+public sealed record FrameStats(int ProcessId, string? ProcessName, double Fps, double FrameTimeMs, double? Low1Fps, bool Foreground, double WorstFrameTimeMs = 0, int Stutters = 0);
 
 /// <summary>Counts the frames apps present (DirectX present calls), while something wants them.</summary>
 public interface IFrameMonitor
@@ -51,6 +53,22 @@ public sealed class FrameTimes(long ticksPerSecond)
 
     /// <summary>Fewest frame times for a 1 % low.</summary>
     public const int LowFrames = 100;
+
+    /// <summary>
+    /// A stutter is a frame that took at least this many times as long as the frames around it (the median of the
+    /// <see cref="StutterNeighbors"/> before and after it): a hitch, not a slow stretch (all its frames are alike; that is a
+    /// drop, counted against the usual frame rate)…
+    /// </summary>
+    public const double StutterFactor = 2.5;
+
+    /// <summary>…and at least this much longer than them, in ms (at a high frame rate a few ms more is not seen).</summary>
+    public const double StutterMinExtraMs = 20;
+
+    /// <summary>The frames on each side a frame is compared with.</summary>
+    public const int StutterNeighbors = 5;
+
+    /// <summary>Fewest frame times in the last 30 s before stutters are counted.</summary>
+    public const int StutterFrames = 30;
 
     /// <summary>
     /// How long before "now" the measured second ends. ETW hands frames over in buffers (every 100 ms for the frame
@@ -107,8 +125,11 @@ public sealed class FrameTimes(long ticksPerSecond)
         }
     }
 
-    /// <summary>The app in front if it presented in the last 2 s, else the one that presented most; null when none did.</summary>
-    public (int ProcessId, double Fps, double FrameTimeMs, double? Low1Fps, bool Foreground)? Stats(long now, int? foreground)
+    /// <summary>
+    /// The app in front if it presented in the last 2 s, else the one that presented most; null when none did. Also the
+    /// longest frame of the last second and how many of its frames were stutters (see <see cref="StutterFactor"/>).
+    /// </summary>
+    public (int ProcessId, double Fps, double FrameTimeMs, double? Low1Fps, bool Foreground, double WorstFrameTimeMs, int Stutters)? Stats(long now, int? foreground)
     {
         lock (_lock)
         {
@@ -152,28 +173,125 @@ public sealed class FrameTimes(long ticksPerSecond)
             double fps = lastSecond.Length;
             var window = lastSecond.Length >= 2 ? lastSecond : times[^Math.Min(times.Length, 2)..];
             var frameTime = window.Length >= 2 ? (window[^1] - window[0]) * 1000.0 / ticksPerSecond / (window.Length - 1) : 0;
+
+            // Since its last frame: while an app is frozen no frame comes, and the wait is the frame being late.
+            var sinceLast = times.Length > 0 ? (end - times[^1]) * 1000.0 / ticksPerSecond : 0;
             if (fps < 2 && frameTime > 0)
             {
-                // Fewer than two frames a second: the rate from the last frame time.
-                fps = 1000 / frameTime;
+                // Fewer than two frames a second: the rate from the last frame time, or from the wait when it is longer.
+                fps = 1000 / Math.Max(frameTime, sinceLast);
+            }
+
+            var intervals = new double[Math.Max(0, times.Length - 1)];
+            for (var i = 1; i < times.Length; i++)
+            {
+                intervals[i - 1] = (times[i] - times[i - 1]) * 1000.0 / ticksPerSecond;
+            }
+
+            // The frames that ended in the last second (also the one that ended its first frame, so a hitch across two
+            // seconds is counted once, in the second its frame came): the longest, and the stutters against the usual
+            // (median) frame time of the 30 s.
+            var lastIntervals = intervals.AsSpan(intervals.Length - Math.Min(intervals.Length, lastSecond.Length));
+            var worstMs = sinceLast > frameTime ? sinceLast : 0;
+            foreach (var interval in lastIntervals)
+            {
+                worstMs = Math.Max(worstMs, interval);
+            }
+
+            var sorted = intervals.ToArray();
+            Array.Sort(sorted);
+            var stutters = 0;
+            if (sorted.Length >= StutterFrames)
+            {
+                var first = intervals.Length - lastIntervals.Length;
+                for (var i = first; i < intervals.Length; i++)
+                {
+                    var around = Neighbors(intervals, i);
+                    if (around > 0 && intervals[i] >= Math.Max(around * StutterFactor, around + StutterMinExtraMs))
+                    {
+                        stutters++;
+                    }
+                }
             }
 
             double? low = null;
             if (times.Length > LowFrames)
             {
-                var intervals = new double[times.Length - 1];
-                for (var i = 1; i < times.Length; i++)
-                {
-                    intervals[i - 1] = (times[i] - times[i - 1]) * 1000.0 / ticksPerSecond;
-                }
-
-                Array.Sort(intervals);
-                var worst = Math.Max(1, intervals.Length / 100);
-                var average = intervals[^worst..].Average();
+                var worst = Math.Max(1, sorted.Length / 100);
+                var average = sorted.AsSpan(sorted.Length - worst).ToArray().Average();
                 low = average > 0 ? 1000 / average : null;
             }
 
-            return (pick, fps, frameTime, low, pick == foreground);
+            return (pick, fps, frameTime, low, pick == foreground, worstMs, stutters);
         }
+    }
+
+    /// <summary>The median of the frame times around <paramref name="index"/> (up to <see cref="StutterNeighbors"/> on each side, not itself).</summary>
+    internal static double Neighbors(double[] intervals, int index)
+    {
+        var around = new List<double>(2 * StutterNeighbors);
+        for (var i = Math.Max(0, index - StutterNeighbors); i <= Math.Min(intervals.Length - 1, index + StutterNeighbors); i++)
+        {
+            if (i != index)
+            {
+                around.Add(intervals[i]);
+            }
+        }
+
+        if (around.Count == 0)
+        {
+            return 0;
+        }
+
+        around.Sort();
+        return around.Count % 2 == 1 ? around[around.Count / 2] : (around[(around.Count / 2) - 1] + around[around.Count / 2]) / 2;
+    }
+}
+
+/// <summary>
+/// The game's usual frame rate: the median of its per-second frame rates over the last two minutes, after its first
+/// 30 s (loading screens and shader compiling right after a start are not its usual). A frame rate well below it is a
+/// drop. Not thread-safe (one per collector).
+/// </summary>
+public sealed class UsualFrameRate
+{
+    /// <summary>How far back the median looks.</summary>
+    public static readonly TimeSpan Window = TimeSpan.FromMinutes(2);
+
+    /// <summary>How long a game must have been measured before it has a usual frame rate.</summary>
+    public static readonly TimeSpan Warmup = TimeSpan.FromSeconds(30);
+
+    /// <summary>A pause in its frames longer than this starts it over (another session).</summary>
+    public static readonly TimeSpan Gap = TimeSpan.FromSeconds(60);
+
+    private readonly Queue<(DateTimeOffset At, double Fps)> _recent = new();
+    private int _processId;
+    private DateTimeOffset _since;
+    private DateTimeOffset _last;
+
+    /// <summary>Adds a second's frame rate of <paramref name="processId"/> and returns its usual frame rate, or null while warming up.</summary>
+    public double? Add(int processId, DateTimeOffset at, double fps)
+    {
+        if (processId != _processId || at - _last > Gap)
+        {
+            _recent.Clear();
+            _processId = processId;
+            _since = at;
+        }
+
+        _last = at;
+        _recent.Enqueue((at, fps));
+        while (_recent.Count > 0 && at - _recent.Peek().At > Window)
+        {
+            _recent.Dequeue();
+        }
+
+        if (at - _since < Warmup)
+        {
+            return null;
+        }
+
+        var values = _recent.Select(r => r.Fps).Order().ToList();
+        return values[values.Count / 2];
     }
 }

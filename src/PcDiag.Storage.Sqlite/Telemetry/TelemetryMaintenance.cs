@@ -104,10 +104,15 @@ public sealed partial class TelemetryMaintenance : ITelemetrySpace
         new("ServiceSnapshots", "ts", Keep.Raw),
         new("SensorReadings", "ts", Keep.Raw),
         new("ExtensionMetrics", "ts", Keep.Raw),
+        new("FrameMetrics", "ts", Keep.Raw),
+        new("ConnectionMetrics", "ts", Keep.Raw),
         new("WindowsEvents", "ts", Keep.Long),
         new("ServiceEvents", "ts", Keep.Long),
         new("DisplayEvents", "ts", Keep.Long),
         new("Anomalies", "start_ts", Keep.Long),
+        new("DriverLatency", "ts", Keep.Long),
+        new("QualityMinutes", "ts", Keep.Long),
+        new("GameSessions", "start_ts", Keep.Long),
         new("Rollup1m", "ts", Keep.Long),
     ];
 

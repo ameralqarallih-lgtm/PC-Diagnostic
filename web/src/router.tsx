@@ -1,6 +1,7 @@
 import { createRootRoute, createRoute, createRouter, lazyRouteComponent, type RouterHistory } from '@tanstack/react-router';
 import { AppShell } from '@/components/layout/AppShell';
 import { parseDiagnosticsSearch } from '@/features/diagnostics/search';
+import { parseGamingSearch } from '@/features/gaming/search';
 import { parseHistorySearch } from '@/features/history/ranges';
 import { parseIncidentSearch } from '@/features/incidents/IncidentPage';
 import { parseIncidentsSearch } from '@/features/incidents/IncidentsPage';
@@ -50,6 +51,19 @@ const diagnosticsRoute = createRoute({
   path: 'diagnostics',
   validateSearch: parseDiagnosticsSearch,
   component: lazyRouteComponent(() => import('@/features/diagnostics/DiagnosticsPage'), 'DiagnosticsPage'),
+});
+
+const gamingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'gaming',
+  validateSearch: parseGamingSearch,
+  component: lazyRouteComponent(() => import('@/features/gaming/GamingPage'), 'GamingPage'),
+});
+
+const networkRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: 'network',
+  component: lazyRouteComponent(() => import('@/features/network/NetworkPage'), 'NetworkPage'),
 });
 
 const systemRoute = createRoute({
@@ -102,7 +116,7 @@ const settingsRoute = createRoute({
   component: lazyRouteComponent(() => import('@/features/settings/SettingsPage'), 'SettingsPage'),
 });
 
-const routeTree = rootRoute.addChildren([dashboardRoute, historyRoute, incidentsRoute, incidentRoute, diagnosticsRoute, systemRoute, driversRoute, tuneUpRoute, overlayRoute, charactersRoute, generatorRoute, storageRoute, settingsRoute]);
+const routeTree = rootRoute.addChildren([dashboardRoute, historyRoute, incidentsRoute, incidentRoute, diagnosticsRoute, gamingRoute, networkRoute, systemRoute, driversRoute, tuneUpRoute, overlayRoute, charactersRoute, generatorRoute, storageRoute, settingsRoute]);
 
 /** Creates the router; tests pass a memory history. */
 export function createAppRouter(history?: RouterHistory) {

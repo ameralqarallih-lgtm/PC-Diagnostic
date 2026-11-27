@@ -3,6 +3,7 @@ import { useNavigate, useSearch } from '@tanstack/react-router';
 import { apiGet } from '@/lib/api/client';
 import type { SystemOverview } from '@/lib/api/types';
 import { RecorderOverheadCard } from './RecorderOverheadCard';
+import { LatencyTab } from './LatencyTab';
 import { StabilityTab } from './StabilityTab';
 import { SystemOverviewView } from './SystemOverviewView';
 
@@ -33,6 +34,7 @@ export function SystemPage() {
           onTab={(tab) => void navigate({ search: tab === 'overview' ? {} : { tab }, replace: true })}
           extraTabs={[
             { id: 'stability', label: 'Stability', content: <StabilityTab /> },
+            { id: 'latency', label: 'Latency', content: <LatencyTab /> },
             { id: 'recorder', label: 'Recorder cost', content: <RecorderOverheadCard /> },
           ]}
           live

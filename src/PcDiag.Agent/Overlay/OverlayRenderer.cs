@@ -165,7 +165,13 @@ internal static partial class OverlayRenderer
     /// with the motion at <paramref name="motionSeconds"/> (still, at its start, without it), and the layers are given
     /// back when asked (to compose the next moments without drawing the readings again).
     /// </summary>
-    internal static (Bitmap Bitmap, PanelHits Hits, MotionLayers? Layers) RenderLayers(OverlayPanel panel, IReadOnlyDictionary<string, OverlaySource> sources, double scale, OverlayHistory? history, DateTime? now, Size? atLeast, ArrangeView? arrange, double? motionSeconds, bool keepLayers)
+    /// <param name="reuse">
+    /// The layers this panel was drawn with last, if any. When its background is the same (look, size, scale) their
+    /// background and what lies over an animated picture are taken over, and their readings' layer drawn on again, so a
+    /// refresh or a gliding value draws only the readings (the same pixels: the background was made from the same kept
+    /// copy). They can no longer be composed after; the caller disposes them as before.
+    /// </param>
+    internal static (Bitmap Bitmap, PanelHits Hits, MotionLayers? Layers) RenderLayers(OverlayPanel panel, IReadOnlyDictionary<string, OverlaySource> sources, double scale, OverlayHistory? history, DateTime? now, Size? atLeast, ArrangeView? arrange, double? motionSeconds, bool keepLayers, MotionLayers? reuse = null)
     {
         ArgumentNullException.ThrowIfNull(panel);
         ArgumentNullException.ThrowIfNull(sources);
@@ -233,17 +239,23 @@ internal static partial class OverlayRenderer
 
             // An animated picture is drawn frame by frame between the layers (with what lies over it).
             var animation = IsAnimation(style.Image) ? Animations?.Invoke(style.Image!) : null;
-            KeptBackground(g, bitmap.Size, shape, box, style, m, overlays: animation is null);
 
             // A moving background: what is above it (title, readings, border) goes on a layer of its own.
             var moving = (style.Motion is { } motion && motion != "none") || animation is not null;
+            var backKey = new BackgroundKey(style, m.S, bitmap.Size, box, animation is null);
+
+            // The last layers' background when it is the same: the composing below covers the whole picture with it, so
+            // it is not drawn here again (drawing and copying a 1920 x 480 background took a few ms a glide step).
+            var taken = moving ? reuse?.Take(backKey) : null;
+            var whole = taken is not null || KeptBackground(g, bitmap.Size, shape, box, style, m, overlays: animation is null);
+
             // Premultiplied: the layers are blended every motion frame, several times faster than plain alpha.
-            Bitmap? back = moving ? bitmap.Clone(new Rectangle(0, 0, bitmap.Width, bitmap.Height), System.Drawing.Imaging.PixelFormat.Format32bppPArgb) : null;
+            Bitmap? back = moving ? taken?.Back ?? bitmap.Clone(new Rectangle(0, 0, bitmap.Width, bitmap.Height), System.Drawing.Imaging.PixelFormat.Format32bppPArgb) : null;
             Bitmap? frontBitmap = null;
             Graphics? front = null;
             if (moving)
             {
-                frontBitmap = new Bitmap(bitmap.Width, bitmap.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+                frontBitmap = taken?.Front ?? new Bitmap(bitmap.Width, bitmap.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
                 front = Graphics.FromImage(frontBitmap);
                 front.SmoothingMode = SmoothingMode.AntiAlias;
                 front.TextRenderingHint = TextRenderingHint.AntiAlias;
@@ -337,7 +349,8 @@ internal static partial class OverlayRenderer
 
             // The background, the motion at this moment, then the rest.
             front.Dispose();
-            var layers = new MotionLayers(back!, frontBitmap!, box, style.CornerRadius * m.S, style, m.S, animation, m);
+            // Its background can be taken over by the next drawing only when it was whole (no picture still loading).
+            var layers = new MotionLayers(back!, frontBitmap!, box, style.CornerRadius * m.S, style, m.S, animation, m, whole ? backKey : null, taken?.Above);
             g.ResetClip();
             layers.Compose(g, motionSeconds ?? 0);
             if (keepLayers)
@@ -362,18 +375,44 @@ internal static partial class OverlayRenderer
     /// (title, readings, border), each drawn once per refresh; <c>Compose</c> draws a moment of the motion between
     /// them. The moment is the time in seconds (the same clock everywhere, so panels and the editor move together).
     /// </summary>
-    internal sealed class MotionLayers(Bitmap back, Bitmap front, RectangleF box, float radius, OverlayStyle style, float s, AnimatedPicture? animation = null, Metrics? metrics = null) : IDisposable
+    internal sealed class MotionLayers(Bitmap back, Bitmap front, RectangleF box, float radius, OverlayStyle style, float s, AnimatedPicture? animation = null, Metrics? metrics = null, BackgroundKey? backKey = null, Bitmap? above = null) : IDisposable
     {
+        private Bitmap? _back = back;
+        private Bitmap? _front = front;
+
         // What lies over an animated picture (pattern, sheen, accent edge): it never moves, so it is drawn once and laid
         // over each frame. Drawn again every frame, a hexagon pattern alone cost 10 ms of a 1920 x 480 frame's 16.
-        private Bitmap? _above;
+        private Bitmap? _above = above;
 
-        public Size Size => back.Size;
+        public Size Size { get; } = back.Size;
+
+        /// <summary>
+        /// Gives its bitmaps to the next drawing of the panel when its background is the same as that drawing's (then
+        /// it composes nothing more); null otherwise.
+        /// </summary>
+        internal (Bitmap Back, Bitmap Front, Bitmap? Above)? Take(BackgroundKey key)
+        {
+            if (backKey is not { } kept || !kept.Equals(key) || _back is null || _front is null)
+            {
+                return null;
+            }
+
+            var taken = (_back, _front, _above);
+            _back = null;
+            _front = null;
+            _above = null;
+            return taken;
+        }
 
         /// <summary>Draws the panel at a moment into a picture of its size (cleared first).</summary>
         public void Compose(Graphics g, double seconds)
         {
             ArgumentNullException.ThrowIfNull(g);
+            if (_back is not { } back || _front is not { } front)
+            {
+                return;
+            }
+
             g.CompositingMode = CompositingMode.SourceCopy;
             g.DrawImageUnscaled(back, 0, 0);
             g.CompositingMode = CompositingMode.SourceOver;
@@ -408,9 +447,12 @@ internal static partial class OverlayRenderer
 
         public void Dispose()
         {
-            back.Dispose();
-            front.Dispose();
+            _back?.Dispose();
+            _front?.Dispose();
             _above?.Dispose();
+            _back = null;
+            _front = null;
+            _above = null;
         }
     }
 
@@ -834,7 +876,7 @@ internal static partial class OverlayRenderer
     // ---- Background --------------------------------------------------------------------------------------------
 
     /// <summary>A panel's background as last drawn for the same look, size and scale (a refresh or a value gliding draws the same one).</summary>
-    private readonly record struct BackgroundKey(OverlayStyle Style, float Scale, Size Size, RectangleF Box, bool Overlays);
+    internal readonly record struct BackgroundKey(OverlayStyle Style, float Scale, Size Size, RectangleF Box, bool Overlays);
 
     private static readonly Lock BackgroundsLock = new();
     private static readonly LinkedList<(BackgroundKey Key, Bitmap Picture)> Backgrounds = new();
@@ -889,9 +931,10 @@ internal static partial class OverlayRenderer
 
     /// <summary>
     /// Draws the background, from the copy kept for the same look, size and scale when there is one (its shadow alone is
-    /// several blurred passes); the 16 last used are kept, within 48 MB. A picture not loaded yet is not kept.
+    /// several blurred passes); the 16 last used are kept, within 48 MB. A picture not loaded yet is not kept. False when
+    /// it was drawn without its picture (still loading).
     /// </summary>
-    private static void KeptBackground(Graphics g, Size size, GraphicsPath shape, RectangleF box, OverlayStyle style, Metrics m, bool overlays)
+    private static bool KeptBackground(Graphics g, Size size, GraphicsPath shape, RectangleF box, OverlayStyle style, Metrics m, bool overlays)
     {
         var key = new BackgroundKey(style, m.S, size, box, overlays);
         lock (BackgroundsLock)
@@ -906,7 +949,7 @@ internal static partial class OverlayRenderer
                     g.CompositingMode = CompositingMode.SourceCopy;
                     g.DrawImageUnscaled(node.Value.Picture, 0, 0);
                     g.CompositingMode = mode;
-                    return;
+                    return true;
                 }
             }
         }
@@ -915,7 +958,7 @@ internal static partial class OverlayRenderer
         if (waiting)
         {
             DrawBackground(g, shape, box, style, m, overlays);
-            return;
+            return false;
         }
 
         var picture = new Bitmap(size.Width, size.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
@@ -950,6 +993,8 @@ internal static partial class OverlayRenderer
                 node = next;
             }
         }
+
+        return true;
     }
 
     private static void DrawBackground(Graphics g, GraphicsPath shape, RectangleF box, OverlayStyle style, Metrics m, bool overlays = true)

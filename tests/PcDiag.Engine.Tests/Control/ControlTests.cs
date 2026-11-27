@@ -167,7 +167,7 @@ public sealed class ControlCommandTests
             return new ControlResult(true, "Done.", Changed: 1);
         }
 
-        public Task<TuneUpReport> ScanAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<TuneUpReport> ScanAsync(CancellationToken cancellationToken, bool fresh = false) => throw new NotSupportedException();
 
         public Task<ControlResult> ApplyAsync(string action, IReadOnlyList<string> items, string? value, bool confirmed, CancellationToken cancellationToken, bool safe = false)
         {

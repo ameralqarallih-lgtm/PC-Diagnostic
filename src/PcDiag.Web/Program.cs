@@ -133,6 +133,7 @@ do
     app.MapStatusEndpoints();
     PcDiag.Web.Updates.UpdateEndpoints.MapUpdateEndpoints(app);
     app.MapStabilityEndpoints();
+    app.MapQualityEndpoints();
     app.MapControlEndpoints();
     app.MapDashboardEndpoints();
     app.MapOverlayEndpoints();

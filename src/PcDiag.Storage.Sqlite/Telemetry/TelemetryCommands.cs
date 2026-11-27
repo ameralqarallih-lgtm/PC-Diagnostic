@@ -14,7 +14,32 @@ internal sealed class TelemetryCommands : IDisposable
         Cpu = new InsertCommand(connection, "CpuMetrics",
             "ts", "total_pct", "user_pct", "kernel_pct", "freq_mhz", "max_freq_mhz", "perf_pct", "perf_limit_pct",
             "perf_limit_flags", "queue_len", "ctx_switches_ps", "interrupts_ps", "package_temp_c", "package_power_w",
-            "per_core_util", "per_core_mhz");
+            "per_core_util", "per_core_mhz", "dpc_pct", "isr_pct", "dpcs_ps", "dpc_core_pct", "isr_core_pct", "core_max_pct");
+        Frame = new InsertCommand(connection, "FrameMetrics",
+            "ts", "pid", "game", "fps", "frame_ms", "worst_ms", "stutters", "low1_fps", "normal_fps",
+            "displayed_fps", "dropped", "worst_displayed_ms", "display_latency_ms", "gpu_busy_pct", "cpu_busy_pct", "present_mode", "windowed");
+        Connection = new InsertCommand(connection, "ConnectionMetrics",
+            "ts", "router_ms", "router_loss", "provider_ms", "provider_loss", "internet_ms", "internet_loss", "dns_ms", "dns_failed", "provider_addr");
+        DriverLatency = new InsertCommand(connection, "DriverLatency",
+            "ts", "from_ts", "seconds", "reason", "driver", "dpcs", "dpc_max_us", "dpc_total_us", "isrs", "isr_max_us", "isr_total_us", "over_500us", "over_1ms", "problem");
+        QualityMinute = new InsertCommand(connection, "QualityMinutes",
+            "ts", "seconds", "game", "game_seconds", "fps_avg", "fps_min", "low1_fps", "stutters", "worst_ms", "drop_seconds", "dpc_core_max", "isr_core_max", "dpc_avg",
+            "router_ms", "router_max", "router_loss", "provider_ms", "provider_max", "provider_loss", "internet_ms", "internet_max", "internet_jitter", "internet_loss",
+            "dns_ms", "dns_checks", "dns_failed", "wifi_min", "net_bps",
+            "displayed_fps", "dropped", "display_latency_ms", "gpu_busy_pct", "cpu_busy_pct", "present_mode");
+        GameSessionInsert = new InsertCommand(connection,
+            """
+            INSERT INTO GameSessions (game, start_ts, end_ts, seconds, fps_avg, fps_p1, low1_fps, stutters, drop_seconds, worst_ms,
+              displayed_fps, dropped, display_latency_ms, gpu_busy_pct, cpu_busy_pct, present_mode, windowed, recognized)
+            VALUES ($p0, $p1, $p2, $p3, $p4, $p5, $p6, $p7, $p8, $p9, $p10, $p11, $p12, $p13, $p14, $p15, $p16, $p17) RETURNING id;
+            """, 18);
+        GameSessionUpdate = new InsertCommand(connection,
+            """
+            UPDATE GameSessions SET end_ts = $p1, seconds = $p2, fps_avg = $p3, fps_p1 = $p4, low1_fps = $p5, stutters = $p6, drop_seconds = $p7, worst_ms = $p8,
+              displayed_fps = $p9, dropped = $p10, display_latency_ms = $p11, gpu_busy_pct = $p12, cpu_busy_pct = $p13, present_mode = $p14, windowed = $p15,
+              recognized = $p16
+            WHERE id = $p0;
+            """, 17);
         Memory = new InsertCommand(connection, "MemoryMetrics",
             "ts", "total_b", "available_b", "free_b", "cache_b", "commit_b", "commit_limit_b", "paged_pool_b",
             "nonpaged_pool_b", "compressed_b", "page_faults_ps", "hard_faults_ps", "pages_ps", "pressure");
@@ -32,7 +57,7 @@ internal sealed class TelemetryCommands : IDisposable
             "ts", "mount", "disk_id", "total_b", "free_b", "label", "file_system", "drive_type");
         ProcessSnapshot = new InsertCommand(connection, "ProcessSnapshots",
             "ts", "proc_key", "cpu_pct", "cpu_time_ms", "ws_b", "private_b", "commit_b", "io_read_bps", "io_write_bps",
-            "gpu_pct", "gpu_engine", "gpu_mem_b", "threads", "handles", "priority", "state", "disk_read_bps", "disk_write_bps", "net_rx_bps", "net_tx_bps");
+            "gpu_pct", "gpu_engine", "gpu_mem_b", "threads", "handles", "priority", "state", "disk_read_bps", "disk_write_bps", "net_rx_bps", "net_tx_bps", "net_retrans_ps");
         ProcessIdentity = new InsertCommand(connection,
             """
             INSERT INTO ProcessIdentity (proc_key, pid, ppid, name, path, cmdline, user, start_ts, signer, sig_status) VALUES ($p0, $p1, $p2, $p3, $p4, $p5, $p6, $p7, $p8, $p9)
@@ -188,7 +213,19 @@ internal sealed class TelemetryCommands : IDisposable
 
     public InsertCommand Availability { get; }
 
-    private IEnumerable<InsertCommand> All => [SystemSnapshot, Cpu, Memory, Gpu, Disk, Network, Volume, ProcessSnapshot, ProcessIdentity, ProcessEnded, ProcessesEndedUnseen, ProcessEvent, DisplaySnapshot, LastDisplayHash, DisplayEvent, WindowsEvent, ProcessCrash, ServiceEventFromLog, ServiceSnapshot, ServiceEvent, SensorCatalog, SensorReading, SystemInfo, HardwareSnapshot, IoDevice, IoDevicesGone, Driver, LastHash, LastHardwareHash, Device, DeviceSeen, Availability];
+    public InsertCommand Frame { get; }
+
+    public InsertCommand Connection { get; }
+
+    public InsertCommand DriverLatency { get; }
+
+    public InsertCommand QualityMinute { get; }
+
+    public InsertCommand GameSessionInsert { get; }
+
+    public InsertCommand GameSessionUpdate { get; }
+
+    private IEnumerable<InsertCommand> All => [SystemSnapshot, Cpu, Memory, Gpu, Disk, Network, Volume, ProcessSnapshot, ProcessIdentity, ProcessEnded, ProcessesEndedUnseen, ProcessEvent, DisplaySnapshot, LastDisplayHash, DisplayEvent, WindowsEvent, ProcessCrash, ServiceEventFromLog, ServiceSnapshot, ServiceEvent, SensorCatalog, SensorReading, SystemInfo, HardwareSnapshot, IoDevice, IoDevicesGone, Driver, LastHash, LastHardwareHash, Device, DeviceSeen, Availability, Frame, Connection, DriverLatency, QualityMinute, GameSessionInsert, GameSessionUpdate];
 
     public void Enlist(SqliteTransaction transaction)
     {

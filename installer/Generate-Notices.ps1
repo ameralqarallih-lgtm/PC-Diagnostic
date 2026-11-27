@@ -19,6 +19,7 @@ param(
     [Parameter(Mandatory = $true)][string] $PawnIOVersion,
     [Parameter(Mandatory = $true)][string] $InnoVersion,
     [Parameter(Mandatory = $true)][string] $SeaweedFSVersion,
+    [Parameter(Mandatory = $true)][string] $PresentMonVersion,
     [string] $Root = (Split-Path -Parent $PSScriptRoot)
 )
 
@@ -138,6 +139,8 @@ Add-Component 'PawnIO (driver installer, PawnIO_setup.exe)' $PawnIOVersion 'GPL-
     'Copyright namazso' "PawnIO is a separate program, shipped unmodified and installed by its own setup when you choose it during installation (ARCHITECTURE 2a). LibreHardwareMonitor talks to it through its device interface; PC Diagnostic does not link to it. Its complete source code is available at the links above; the GNU General Public License version 2 follows in the license texts." 'separate program'
 Add-Component 'PawnIO module Nvidia.bin (agent\pawnio\Nvidia.bin)' '0.2.11 (PawnIO.Modules)' 'LGPL-2.1-or-later' 'https://github.com/namazso/PawnIO.Modules (source: https://github.com/namazso/PawnIO.Modules/blob/0.2.11/Nvidia.p)' `
     'Copyright (C) 2026 CapFrameX, Blacktempel' "A module the PawnIO driver runs to read NVIDIA RTX 50 series thermal registers, shipped unmodified as the signed file from the PawnIO.Modules 0.2.11 release. PC Diagnostic does not link to it; it hands the file to the driver. Its source is at the links above; the GNU Lesser General Public License version 2.1 follows in the license texts." 'PawnIO module'
+Add-Component 'PresentMon (tools\presentmon\PresentMon.exe)' $PresentMonVersion 'MIT' 'https://github.com/GameTechDev/PresentMon' `
+    'Copyright (C) 2017-2024 Intel Corporation' "A separate program, shipped unmodified (Intel's signed release) and run by the recorder while a game is in front, to count the frames that reach the screen. The MIT License follows in the license texts." 'separate program'
 Add-Component 'SeaweedFS (PC Diagnostic Storage, tools\seaweedfs\weed.exe)' $SeaweedFSVersion 'Apache-2.0' 'https://github.com/seaweedfs/seaweedfs' `
     'Copyright Chris Lu and SeaweedFS contributors' "A separate program, shipped unmodified and run by PC Diagnostic on this PC only (127.0.0.1) as its object storage. The Apache License 2.0 follows in the license texts." 'separate program'
 Add-Component 'Inno Setup (installer engine)' $InnoVersion 'Inno Setup License' 'https://jrsoftware.org/isinfo.php' `

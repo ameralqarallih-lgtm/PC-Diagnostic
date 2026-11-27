@@ -39,6 +39,8 @@ internal static class MigrationCatalog
             new Migration(9, "Custom recording selection", ["Telemetry.0009_recording_selection.sql"]),
             new Migration(10, "Service event process", ["Telemetry.0010_service_event_pid.sql"]),
             new Migration(11, "Device register", ["Telemetry.0011_io_devices.sql"]),
+            new Migration(12, "Game frame rates, connection quality and driver latency", ["Telemetry.0012_frames_connection_latency.sql"]),
+            new Migration(13, "Frames that reached the screen", ["Telemetry.0013_displayed_frames.sql"]),
         ],
         DatabaseKind.IncidentIndex =>
         [
@@ -60,6 +62,8 @@ internal static class MigrationCatalog
             new Migration(9, "Custom recording selection", ["Telemetry.0009_recording_selection.sql"]),
             new Migration(10, "Service event process", ["Telemetry.0010_service_event_pid.sql"]),
             new Migration(11, "Device register", ["Telemetry.0011_io_devices.sql"]),
+            new Migration(12, "Game frame rates, connection quality and driver latency", ["Telemetry.0012_frames_connection_latency.sql"]),
+            new Migration(13, "Frames that reached the screen", ["Telemetry.0013_displayed_frames.sql"]),
         ],
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown database kind."),
     };

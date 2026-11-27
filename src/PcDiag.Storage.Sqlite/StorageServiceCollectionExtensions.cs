@@ -18,6 +18,7 @@ public static class StorageServiceCollectionExtensions
         services.TryAddSingleton<DatabaseInitializer>();
         services.TryAddSingleton<Incidents.IncidentIndexReader>();
         services.TryAddSingleton<Reading.HistoryReader>();
+        services.TryAddSingleton<Reading.QualityReader>();
         services.TryAddSingleton<Reading.SystemReader>();
         services.TryAddSingleton<Reading.IncidentReader>();
         services.TryAddSingleton<Reading.AnomalyReader>();

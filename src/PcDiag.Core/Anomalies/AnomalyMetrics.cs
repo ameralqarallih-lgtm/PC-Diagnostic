@@ -54,6 +54,33 @@ public static class AnomalyMetrics
     /// <summary>Receive and send errors since the previous sample.</summary>
     public const string NetworkErrors = "net.errors";
 
+    /// <summary>How far (%) the game in front runs below its usual frame rate (0 at or above it).</summary>
+    public const string GameDrop = "game.drop";
+
+    /// <summary>The game's stutters in the last second (frames far longer than the frames around them).</summary>
+    public const string GameStutters = "game.stutters";
+
+    /// <summary>The busiest processor's time in drivers' DPCs or interrupts, whichever is higher (%).</summary>
+    public const string DriverTime = "latency.dpc";
+
+    /// <summary>The longest single DPC or ISR of a driver latency measurement (µs; only when one finished).</summary>
+    public const string DriverLongest = "latency.driver";
+
+    /// <summary>The share of the last 20 pings to the internet that were lost (%).</summary>
+    public const string ConnectionLoss = "conn.loss";
+
+    /// <summary>The share of the last 20 pings to the router that were lost (%).</summary>
+    public const string RouterLoss = "conn.router_loss";
+
+    /// <summary>The internet round trip (ms).</summary>
+    public const string ConnectionPing = "conn.ping";
+
+    /// <summary>The router round trip (ms).</summary>
+    public const string RouterPing = "conn.router";
+
+    /// <summary>A failed DNS lookup (1 for each).</summary>
+    public const string DnsFailed = "conn.dns_failed";
+
     /// <summary>All metrics.</summary>
     public static IReadOnlyList<AnomalyMetric> All { get; } =
     [
@@ -69,6 +96,15 @@ public static class AnomalyMetrics
         new(DiskLatency, "Disk latency", "ms", true, 1, 10_000),
         new(DiskQueue, "Disk queue length", "", true, 1, 1000),
         new(NetworkErrors, "Network packet errors", "", true, 1, 100_000),
+        new(GameDrop, "Game frame rate below its usual", "%", false, 5, 100),
+        new(GameStutters, "Game stutters", "", false, 1, 1000),
+        new(DriverTime, "Driver time on the busiest processor (DPCs or interrupts)", "%", false, 1, 100),
+        new(DriverLongest, "Longest driver DPC or ISR", "µs", false, 50, 1_000_000),
+        new(ConnectionLoss, "Lost pings to the internet", "%", false, 1, 100),
+        new(RouterLoss, "Lost pings to the router", "%", false, 1, 100),
+        new(ConnectionPing, "Internet round trip", "ms", false, 1, 10_000),
+        new(RouterPing, "Router round trip", "ms", false, 1, 10_000),
+        new(DnsFailed, "Failed DNS lookups", "", false, 1, 1000),
     ];
 
     private static readonly Dictionary<string, AnomalyMetric> ById = All.ToDictionary(m => m.Id, StringComparer.Ordinal);

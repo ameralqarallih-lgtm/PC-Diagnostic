@@ -58,6 +58,8 @@ public sealed partial class TelemetryStorageConsumer : ISampleConsumer, IAsyncDi
     private long _lastFlush;
     private long _droppedWhileFailing;
 
+    private readonly IOptionsMonitor<RecorderOptions>? _recorder;
+    private readonly QualityHistory _quality = new();
     private readonly IStorageGuard? _guard;
     private bool _pauseLogged;
 
@@ -69,8 +71,10 @@ public sealed partial class TelemetryStorageConsumer : ISampleConsumer, IAsyncDi
         TimeProvider timeProvider,
         ILogger<TelemetryStorageConsumer> logger,
         IOptionsMonitor<SamplingOptions>? sampling = null,
-        IStorageGuard? guard = null)
+        IStorageGuard? guard = null,
+        IOptionsMonitor<RecorderOptions>? recorder = null)
     {
+        _recorder = recorder;
         _guard = guard;
         _topProcessCount = () => sampling?.CurrentValue.TopProcessCount ?? new SamplingOptions().TopProcessCount;
         _paths = paths;
@@ -100,6 +104,16 @@ public sealed partial class TelemetryStorageConsumer : ISampleConsumer, IAsyncDi
         // later writes it.
 
         _sentOnce.Note(frame, frame.Recorded);
+
+        // The quality history is kept from every frame (also while the recorder only watches), when it is on.
+        if (_recorder?.CurrentValue.QualityHistory != false)
+        {
+            _quality.Add(frame);
+            if (_quality.HasCompleted || frame.DriverLatency is not null)
+            {
+                await WriteQualityAsync(false, frame.DriverLatency, cancellationToken).ConfigureAwait(false);
+            }
+        }
 
 
         // Live-view frames (recorder idle, dashboard open) are never stored; what describes the PC (its hardware, drivers,
@@ -164,6 +178,7 @@ public sealed partial class TelemetryStorageConsumer : ISampleConsumer, IAsyncDi
     /// <inheritdoc />
     public async ValueTask FlushAsync(CancellationToken cancellationToken)
     {
+        await WriteQualityAsync(true, null, cancellationToken).ConfigureAwait(false);
         _lastFlush = _timeProvider.GetTimestamp();
         if (_pending.Count == 0)
         {
@@ -290,7 +305,33 @@ public sealed partial class TelemetryStorageConsumer : ISampleConsumer, IAsyncDi
                 Track("cpu.package_temp_c", FromSensors(cpu.PackageTemperatureC, _frameSensors, SensorKeys.CpuPackageTemperature), frame.Timestamp),
                 Track("cpu.package_power_w", FromSensors(cpu.PackagePowerW, _frameSensors, SensorKeys.CpuPackagePower), frame.Timestamp),
                 cpu.Cores.Count == 0 ? DBNull.Value : CoreBlobs.PackUtilization(cpu.Cores),
-                cpu.Cores.Count == 0 ? DBNull.Value : CoreBlobs.PackFrequency(cpu.Cores)).ConfigureAwait(false);
+                cpu.Cores.Count == 0 ? DBNull.Value : CoreBlobs.PackFrequency(cpu.Cores),
+                Track("cpu.dpc_pct", cpu.DpcPercent, frame.Timestamp),
+                Track("cpu.isr_pct", cpu.InterruptPercent, frame.Timestamp),
+                Track("cpu.dpcs_ps", cpu.DpcsPerSec, frame.Timestamp),
+                cpu.BusiestDpcCore is { } dpcCore ? Math.Round(dpcCore.Percent, 2) : DBNull.Value,
+                cpu.BusiestInterruptCore is { } isrCore ? Math.Round(isrCore.Percent, 2) : DBNull.Value,
+                cpu.Cores.Where(c => c.UtilizationPercent.HasValue).Select(c => c.UtilizationPercent.Value!.Value).DefaultIfEmpty(double.NaN).Max() is var busiest && !double.IsNaN(busiest)
+                    ? Math.Round(busiest, 1) : DBNull.Value).ConfigureAwait(false);
+        }
+
+        if (frame.Frames is { } frames)
+        {
+            await commands.Frame.ExecuteAsync(cancellationToken, ts, frames.ProcessId, frames.Game, frames.Fps, frames.FrameTimeMs, frames.WorstFrameTimeMs, frames.Stutters,
+                frames.Low1Fps, frames.NormalFps, frames.DisplayedFps, frames.Dropped, frames.WorstDisplayedMs, frames.DisplayLatencyMs, frames.GpuBusyPercent,
+                frames.CpuBusyPercent, frames.PresentMode, frames.FullScreen ? 0 : 1).ConfigureAwait(false);
+        }
+
+        if (frame.Connection is { } connection)
+        {
+            await commands.Connection.ExecuteAsync(cancellationToken, ts, connection.Router.Ms, Loss(connection.Router), connection.Provider.Ms, Loss(connection.Provider),
+                connection.Internet.Ms, Loss(connection.Internet), connection.DnsMs, connection.DnsFailed is { } failed ? (failed ? 1 : 0) : null, connection.ProviderAddress)
+                .ConfigureAwait(false);
+        }
+
+        if (frame.DriverLatency is { } latency)
+        {
+            await WriteDriverLatencyAsync(commands, latency, cancellationToken).ConfigureAwait(false);
         }
 
         if (frame.Gpu is { } gpu)
@@ -367,6 +408,88 @@ public sealed partial class TelemetryStorageConsumer : ISampleConsumer, IAsyncDi
                 Track("memory.hard_faults_ps", memory.HardFaultsPerSec, frame.Timestamp),
                 Track("memory.pages_ps", memory.PagesPerSec, frame.Timestamp),
                 Track("memory.pressure", memory.Pressure, frame.Timestamp)).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>100 when the ping was lost, 0 when it came back, null when none was sent (averages give the loss in %).</summary>
+    private static double? Loss(PingResult ping) => ping.Sent ? (ping.Lost ? 100.0 : 0.0) : null;
+
+    /// <summary>A driver latency measurement: one row per driver (one with no driver when it has none). Stored once.</summary>
+    private static async Task WriteDriverLatencyAsync(TelemetryCommands commands, DriverLatencySample latency, CancellationToken cancellationToken)
+    {
+        var ts = UnixTime.ToUnixMs(latency.Timestamp);
+        var from = UnixTime.ToUnixMs(latency.From);
+        if (latency.Drivers.Count == 0)
+        {
+            await commands.DriverLatency.ExecuteAsync(cancellationToken, ts, from, latency.Seconds, latency.Reason, "", null, null, null, null, null, null, null, null, latency.Problem)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        foreach (var d in latency.Drivers)
+        {
+            await commands.DriverLatency.ExecuteAsync(cancellationToken, ts, from, latency.Seconds, latency.Reason, d.Driver, d.Dpcs, d.DpcMaxUs, d.DpcTotalUs, d.Isrs, d.IsrMaxUs,
+                d.IsrTotalUs, d.Over500Us, d.Over1Ms, latency.Problem).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>The quality history's ended minutes and the game session's newest state, in a transaction of its own.</summary>
+    private async Task WriteQualityAsync(bool includeCurrent, DriverLatencySample? latency, CancellationToken cancellationToken)
+    {
+        var minutes = _quality.TakeMinutes(includeCurrent);
+        var session = _quality.TakeSession();
+        if ((minutes.Count == 0 && session is null && latency is null) || _guard is { WritesPaused: true })
+        {
+            return;
+        }
+
+        try
+        {
+            var commands = await GetCommandsAsync(cancellationToken).ConfigureAwait(false);
+            var transaction = (SqliteTransaction)await _connection!.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            await using (transaction.ConfigureAwait(false))
+            {
+                commands.Enlist(transaction);
+                foreach (var m in minutes)
+                {
+                    await commands.QualityMinute.ExecuteAsync(cancellationToken, m.Ts, m.Seconds, m.Game, m.GameSeconds, m.FpsAvg, m.FpsMin, m.Low1Fps, m.Stutters, m.WorstMs, m.DropSeconds,
+                        m.DpcCoreMax, m.IsrCoreMax, m.DpcAvg, m.Router.Ms, m.Router.Max, m.Router.Loss, m.Provider.Ms, m.Provider.Max, m.Provider.Loss, m.Internet.Ms, m.Internet.Max,
+                        m.InternetJitter, m.Internet.Loss, m.DnsMs, m.DnsChecks, m.DnsFailed, m.WifiMin, m.NetBps, m.Shown.DisplayedFps, m.Shown.Dropped,
+                        m.Shown.DisplayLatencyMs, m.Shown.GpuBusyPercent, m.Shown.CpuBusyPercent, m.Shown.PresentMode).ConfigureAwait(false);
+                }
+
+                if (session is not null)
+                {
+                    var end = UnixTime.ToUnixMs(session.End);
+                    if (session.Id is { } id)
+                    {
+                        var shown = session.Shown;
+                        await commands.GameSessionUpdate.ExecuteAsync(cancellationToken, id, end, session.Seconds, session.FpsAvg, session.FpsP1, session.Low1Fps, session.Stutters,
+                            session.DropSeconds, session.WorstMs, shown.DisplayedFps, shown.Dropped, shown.DisplayLatencyMs, shown.GpuBusyPercent, shown.CpuBusyPercent,
+                            shown.PresentMode, shown.WindowedPercent, session.Recognized).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        var shown = session.Shown;
+                        var created = await commands.GameSessionInsert.ScalarAsync(cancellationToken, session.Game, UnixTime.ToUnixMs(session.Start), end, session.Seconds, session.FpsAvg,
+                            session.FpsP1, session.Low1Fps, session.Stutters, session.DropSeconds, session.WorstMs, shown.DisplayedFps, shown.Dropped, shown.DisplayLatencyMs,
+                            shown.GpuBusyPercent, shown.CpuBusyPercent, shown.PresentMode, shown.WindowedPercent, session.Recognized).ConfigureAwait(false);
+                        _quality.Stored(session, Convert.ToInt64(created, CultureInfo.InvariantCulture));
+                    }
+                }
+
+                if (latency is not null)
+                {
+                    await WriteDriverLatencyAsync(commands, latency, cancellationToken).ConfigureAwait(false);
+                }
+
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (SqliteException ex)
+        {
+            LogWriteFailed(_logger, ex, 1);
+            await ResetConnectionAsync().ConfigureAwait(false);
         }
     }
 
@@ -640,7 +763,8 @@ public sealed partial class TelemetryStorageConsumer : ISampleConsumer, IAsyncDi
             p.TrueIo is { } io ? io.DiskReadBytesPerSec : DBNull.Value,
             p.TrueIo is { } io2 ? io2.DiskWriteBytesPerSec : DBNull.Value,
             p.TrueIo is { } io3 ? io3.NetReceiveBytesPerSec : DBNull.Value,
-            p.TrueIo is { } io4 ? io4.NetSendBytesPerSec : DBNull.Value).ConfigureAwait(false);
+            p.TrueIo is { } io4 ? io4.NetSendBytesPerSec : DBNull.Value,
+            p.TrueIo is { } io5 ? io5.NetRetransmitsPerSec : DBNull.Value).ConfigureAwait(false);
     }
 
     private static async Task WriteServicesAsync(TelemetryCommands commands, long ts, ServiceSample services, CancellationToken cancellationToken)

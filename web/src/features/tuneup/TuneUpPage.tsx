@@ -8,7 +8,7 @@ import { ConfirmAction, type PendingAction } from './ConfirmAction';
 import { ProcessesTab } from './ProcessesTab';
 import { recommend, type TuneUpTab } from './recommend';
 import { AdviceTab, CleanupTab, ServicesTab, StartupTab, SystemTab } from './TuneUpTabs';
-import { useControlProcesses, useControlServices, useLiveOnce, useTuneUpReport } from './useControl';
+import { useControlProcesses, useControlServices, useLiveOnce, useTuneUpRescan, useTuneUpReport } from './useControl';
 import { TabFade, TabUnderline } from '@/components/ui/tab-indicator';
 
 const TABS: { id: TuneUpTab; label: string }[] = [
@@ -34,6 +34,7 @@ export function TuneUpPage() {
   const processes = useControlProcesses(tab === 'advice' || tab === 'processes');
   const services = useControlServices(tab === 'advice' || tab === 'services');
   const report = useTuneUpReport();
+  const rescan = useTuneUpRescan();
   const live = useLiveOnce();
   const advice = useMemo(() => recommend(report.data, processes.data, services.data, live.data?.live), [report.data, processes.data, services.data, live.data]);
   const select = (next: TuneUpTab) => void navigate({ search: next === 'advice' ? {} : { tab: next }, replace: true });
@@ -86,7 +87,15 @@ export function TuneUpPage() {
           {tab === 'processes' && <ProcessesTab processes={processes.data} ask={setPending} />}
           {tab === 'services' && <ServicesTab services={services.data} ask={setPending} />}
           {tab === 'startup' && <StartupTab entries={report.data?.startup} />}
-          {tab === 'cleanup' && <CleanupTab targets={report.data?.cleanup} ask={setPending} onRescan={() => void report.refetch()} scanning={report.isFetching} />}
+          {tab === 'cleanup' && (
+            <CleanupTab
+              targets={report.data?.cleanup}
+              ask={setPending}
+              onRescan={() => rescan.mutate()}
+              scanning={report.isFetching || rescan.isPending}
+              measuredAt={report.data?.cleanupAt ?? null}
+            />
+          )}
           {tab === 'system' && <SystemTab report={report.data} ask={setPending} />}
         </TabFade>
       </div>

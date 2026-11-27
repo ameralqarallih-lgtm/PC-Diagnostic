@@ -9,6 +9,12 @@ namespace PcDiag.Core.Telemetry;
 /// </param>
 /// <param name="PerformancePercent">Current performance relative to base frequency (can exceed 100).</param>
 /// <param name="PerformanceLimitPercent">Share of performance allowed by power/thermal/firmware limits (100 = no limit).</param>
+/// <param name="DpcPercent">
+/// Time the processors spent running drivers' deferred procedure calls (DPCs), as a share of all processor time: a
+/// driver holding a processor this way delays everything else on it (sound crackles, frames come late).
+/// </param>
+/// <param name="InterruptPercent">Time spent in drivers' interrupt service routines (ISRs), as a share of all processor time.</param>
+/// <param name="DpcsPerSec">DPCs queued per second.</param>
 public sealed record CpuSample(
     DateTimeOffset Timestamp,
     Reading<double> TotalPercent,
@@ -24,10 +30,36 @@ public sealed record CpuSample(
     Reading<double> InterruptsPerSec,
     Reading<double> PackageTemperatureC,
     Reading<double> PackagePowerW,
-    IReadOnlyList<CpuCoreSample> Cores);
+    IReadOnlyList<CpuCoreSample> Cores,
+    Reading<double> DpcPercent = default,
+    Reading<double> InterruptPercent = default,
+    Reading<double> DpcsPerSec = default)
+{
+    /// <summary>The processor that spent the most time in DPCs, and that share of its time (null when not measured).</summary>
+    public (int Core, double Percent)? BusiestDpcCore => Busiest(c => c.DpcPercent);
+
+    /// <summary>The processor that spent the most time in interrupts, and that share of its time (null when not measured).</summary>
+    public (int Core, double Percent)? BusiestInterruptCore => Busiest(c => c.InterruptPercent);
+
+    private (int Core, double Percent)? Busiest(Func<CpuCoreSample, Reading<double>> read)
+    {
+        (int Core, double Percent)? best = null;
+        foreach (var core in Cores)
+        {
+            if (read(core) is { HasValue: true } r && (best is null || r.Value!.Value > best.Value.Percent))
+            {
+                best = (core.Index, r.Value!.Value);
+            }
+        }
+
+        return best;
+    }
+}
 
 /// <summary>Metrics for one logical processor.</summary>
-public sealed record CpuCoreSample(int Index, Reading<double> UtilizationPercent, Reading<double> FrequencyMhz);
+/// <param name="DpcPercent">Share of this processor's time spent in DPCs.</param>
+/// <param name="InterruptPercent">Share of this processor's time spent in interrupts.</param>
+public sealed record CpuCoreSample(int Index, Reading<double> UtilizationPercent, Reading<double> FrequencyMhz, Reading<double> DpcPercent = default, Reading<double> InterruptPercent = default);
 
 /// <summary>System-wide memory metrics for one tick.</summary>
 public sealed record MemorySample(
@@ -266,7 +298,11 @@ public sealed record ProcessMetrics(
 /// True per-process disk and network transfer rates from kernel events (Enhanced mode); without it only the
 /// process's total I/O (files, devices and network together) is known.
 /// </summary>
-public sealed record ProcessTrueIo(double DiskReadBytesPerSec, double DiskWriteBytesPerSec, double NetReceiveBytesPerSec, double NetSendBytesPerSec)
+/// <param name="NetRetransmitsPerSec">
+/// TCP segments the process had to send again per second (the other side did not acknowledge them in time): lost
+/// packets, a congested or unreliable connection.
+/// </param>
+public sealed record ProcessTrueIo(double DiskReadBytesPerSec, double DiskWriteBytesPerSec, double NetReceiveBytesPerSec, double NetSendBytesPerSec, double NetRetransmitsPerSec = 0)
 {
     /// <summary>No transfers in the period.</summary>
     public static readonly ProcessTrueIo None = new(0, 0, 0, 0);
@@ -417,6 +453,9 @@ public sealed record HardwareSnapshot(DateTimeOffset Timestamp, string ProviderI
 /// Not recorded but watched: the problem rules run on it and the recent minutes are kept in memory, so a problem found
 /// while the recorder is not recording starts a recording and its incident keeps the minutes before it.
 /// </param>
+/// <param name="Frames">The frame rate of the game in front; null when no app in front draws frames full screen.</param>
+/// <param name="Connection">The round trips to the router, the provider and the internet, and the DNS check.</param>
+/// <param name="DriverLatency">A driver latency measurement that finished in this tick (rare).</param>
 public sealed record SampleFrame(
     long Sequence,
     DateTimeOffset Timestamp,
@@ -433,7 +472,120 @@ public sealed record SampleFrame(
     IReadOnlyList<Events.SystemEvent>? Events = null,
     DisplaySample? Display = null,
     bool Recorded = true,
-    bool Watched = false);
+    bool Watched = false,
+    FrameSample? Frames = null,
+    ConnectionSample? Connection = null,
+    DriverLatencySample? DriverLatency = null);
+
+/// <summary>
+/// The frame rate of the game in front over one tick (about a second): the frames it presents (DirectX present calls, or
+/// the graphics kernel's presents for OpenGL and Vulkan), and, from PresentMon, the frames that reached the screen. Measured
+/// while the app in front is recognized as a game (see <c>GameRecognizer</c>: full screen or windowed).
+/// </summary>
+/// <param name="ProcessId">The game.</param>
+/// <param name="Game">Its process name, e.g. "ArkAscended".</param>
+/// <param name="Fps">Frames in the last second.</param>
+/// <param name="FrameTimeMs">The average time between frames.</param>
+/// <param name="WorstFrameTimeMs">The longest time between two frames in the last second (a hitch shows here).</param>
+/// <param name="Stutters">Frames in the last second that took far longer than the frames around them: hitches (see <see cref="Overlay.FrameTimes"/>).</param>
+/// <param name="Low1Fps">The 1 % low over the last 30 s.</param>
+/// <param name="NormalFps">The game's usual frame rate: the median of its last two minutes (null for its first 30 s).</param>
+/// <param name="FullScreen">The game covers its whole screen (full screen or a borderless window); false when windowed.</param>
+/// <param name="DisplayedFps">Frames that reached the screen in the last second (null without PresentMon).</param>
+/// <param name="Dropped">Frames presented in the last second that never reached the screen (replaced before they were shown).</param>
+/// <param name="WorstDisplayedMs">The longest time one image stayed on the screen in the last second (what a hitch looks like).</param>
+/// <param name="DisplayLatencyMs">The average time from a frame's start until it was on the screen.</param>
+/// <param name="GpuBusyPercent">How much of each frame's time the GPU worked on it (near 100: the GPU is the limit).</param>
+/// <param name="CpuBusyPercent">How much of each frame's time the game's CPU work took before presenting it.</param>
+/// <param name="PresentMode">How Windows shows its frames, e.g. "Hardware: Independent Flip", "Composed: Flip" (windowed, through the desktop compositor).</param>
+/// <param name="Recognized">Why it counts as a game: "full screen", "windows" (Windows lists it as a game), "library" (a game library folder), "graphics" (it keeps the 3D engine busy) or "user".</param>
+public sealed record FrameSample(
+    DateTimeOffset Timestamp,
+    int ProcessId,
+    string? Game,
+    double Fps,
+    double FrameTimeMs,
+    double WorstFrameTimeMs,
+    int Stutters,
+    double? Low1Fps,
+    double? NormalFps,
+    bool FullScreen,
+    double? DisplayedFps = null,
+    int? Dropped = null,
+    double? WorstDisplayedMs = null,
+    double? DisplayLatencyMs = null,
+    double? GpuBusyPercent = null,
+    double? CpuBusyPercent = null,
+    string? PresentMode = null,
+    string? Recognized = null)
+{
+    /// <summary>How far the frame rate is below the game's usual one, in percent (0 when at or above it; null when not known yet).</summary>
+    public double? DropPercent => NormalFps is { } normal && normal > 0 ? Math.Max(0, 100 * (1 - (Fps / normal))) : null;
+}
+
+/// <summary>One ping: sent or not, and its round trip when it came back.</summary>
+/// <param name="Sent">A ping was sent in this round (false: nothing to ping, e.g. no router known).</param>
+/// <param name="Ms">The round trip; null when it did not come back within a second (lost).</param>
+public readonly record struct PingResult(bool Sent, double? Ms)
+{
+    /// <summary>Nothing was sent.</summary>
+    public static PingResult None => default;
+
+    /// <summary>It was sent and did not come back.</summary>
+    public bool Lost => Sent && Ms is null;
+}
+
+/// <summary>
+/// The connection's quality over one tick: a ping to the router (the home network: cable or Wi-Fi), to the first hop
+/// after it (the provider's line), and to the internet (1.1.1.1), once a second each; and every 10 s, how long a DNS
+/// lookup takes. Comparing the three shows where a problem is.
+/// </summary>
+/// <param name="Router">The default gateway.</param>
+/// <param name="Provider">The first hop after the router that answers (usually the provider's equipment).</param>
+/// <param name="Internet">The public address.</param>
+/// <param name="DnsMs">A DNS lookup's time, bypassing the cache (only in ticks with a check).</param>
+/// <param name="DnsFailed">The lookup failed or took more than 5 s (only in ticks with a check).</param>
+/// <param name="ProviderAddress">The provider hop's address, e.g. "100.64.0.1".</param>
+public sealed record ConnectionSample(
+    DateTimeOffset Timestamp,
+    PingResult Router,
+    PingResult Provider,
+    PingResult Internet,
+    double? DnsMs,
+    bool? DnsFailed,
+    string? ProviderAddress);
+
+/// <summary>
+/// A driver latency measurement: for a few seconds, every deferred procedure call (DPC) and interrupt service routine
+/// (ISR) the kernel ran, timed and put in the driver it belongs to, as LatencyMon does.
+/// </summary>
+/// <param name="Timestamp">When it ended.</param>
+/// <param name="From">When it started.</param>
+/// <param name="Seconds">How long it measured.</param>
+/// <param name="Reason">Why it ran: "measure" (asked), "dpc" (a processor spent long in DPCs), "stutter" (the game stuttered).</param>
+/// <param name="Drivers">Each driver that ran a DPC or ISR, slowest first.</param>
+/// <param name="Problem">Why it could not measure, when it could not.</param>
+public sealed record DriverLatencySample(DateTimeOffset Timestamp, DateTimeOffset From, double Seconds, string Reason, IReadOnlyList<DriverLatency> Drivers, string? Problem = null)
+{
+    /// <summary>The driver with the longest single DPC or ISR, or null.</summary>
+    public DriverLatency? Slowest => Drivers.Count == 0 ? null : Drivers.MaxBy(d => d.LongestUs);
+}
+
+/// <summary>One driver's DPCs and ISRs in a measurement.</summary>
+/// <param name="Driver">The driver's file name, e.g. "nvlddmkm.sys"; "unknown" when the routine is in no known driver.</param>
+/// <param name="Dpcs">DPCs it ran.</param>
+/// <param name="DpcMaxUs">Its longest DPC, in microseconds.</param>
+/// <param name="DpcTotalUs">All its DPCs' time.</param>
+/// <param name="Isrs">ISRs it ran.</param>
+/// <param name="IsrMaxUs">Its longest ISR.</param>
+/// <param name="IsrTotalUs">All its ISRs' time.</param>
+/// <param name="Over500Us">Its DPCs and ISRs that took 500 µs or more.</param>
+/// <param name="Over1Ms">Its DPCs and ISRs that took 1 ms or more.</param>
+public sealed record DriverLatency(string Driver, long Dpcs, double DpcMaxUs, double DpcTotalUs, long Isrs, double IsrMaxUs, double IsrTotalUs, long Over500Us, long Over1Ms)
+{
+    /// <summary>Its longest DPC or ISR.</summary>
+    public double LongestUs => Math.Max(DpcMaxUs, IsrMaxUs);
+}
 
 /// <summary>Display changes since the previous tick, and the configuration when it changed.</summary>
 /// <param name="Snapshot">The configuration after the changes; null when it did not change.</param>

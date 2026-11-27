@@ -279,14 +279,65 @@ internal static class Cleanup
         return new CleanupEntry(index, relative, name, true, bytes, files, removableBytes, removableFiles, modified, partial);
     }
 
-    /// <summary>Measures every target (what could be removed now).</summary>
-    public static IReadOnlyList<CleanupTarget> Scan(DateTimeOffset now)
+    /// <summary>
+    /// How long a scan's sizes are kept. Walking the caches is the costly part of Tune-up (a scan of the dev PC's shader
+    /// and browser caches took about 18 s of CPU), and the page asked for it again each time its window came back to
+    /// the front; cleaning a target forgets it, and "Measure again" asks for a fresh one.
+    /// </summary>
+    public static readonly TimeSpan ScanKeep = TimeSpan.FromMinutes(15);
+
+    private static readonly Lock ScanLock = new();
+    private static (DateTimeOffset At, List<CleanupTarget> Targets)? _lastScan;
+
+    /// <summary>When the kept scan's caches were measured (null: none kept).</summary>
+    public static DateTimeOffset? LastScanAt
     {
-        var results = Targets.AsParallel().AsOrdered().Select(t =>
+        get
+        {
+            lock (ScanLock)
+            {
+                return _lastScan?.At;
+            }
+        }
+    }
+
+    /// <summary>Forgets the kept scan (after a clean-up, the next scan measures again).</summary>
+    public static void Forget()
+    {
+        lock (ScanLock)
+        {
+            _lastScan = null;
+        }
+    }
+
+    /// <summary>
+    /// Measures every target (what could be removed now): the caches' sizes from the last scan when it is younger than
+    /// <see cref="ScanKeep"/> and <paramref name="fresh"/> is not asked; the Recycle Bin each time (one quick call).
+    /// </summary>
+    public static IReadOnlyList<CleanupTarget> Scan(DateTimeOffset now, bool fresh = false)
+    {
+        List<CleanupTarget>? kept = null;
+        lock (ScanLock)
+        {
+            if (!fresh && _lastScan is { } last && now - last.At >= TimeSpan.Zero && now - last.At < ScanKeep)
+            {
+                kept = last.Targets;
+            }
+        }
+
+        var results = kept is not null ? [.. kept] : Targets.AsParallel().AsOrdered().Select(t =>
         {
             var (bytes, files) = Measure(t, now);
             return new CleanupTarget(t.Id, t.Name, t.Description, bytes, files, t.Recommended, t.Caution);
         }).ToList();
+        if (kept is null)
+        {
+            lock (ScanLock)
+            {
+                _lastScan = (now, [.. results]);
+            }
+        }
+
         var (binBytes, binItems) = ShellCleanup.RecycleBinSize();
         results.Add(new CleanupTarget(RecycleBin, "Recycle Bin", "Files you deleted, on every drive.", binBytes, (int)Math.Min(int.MaxValue, binItems), false,
             "They cannot be restored afterwards."));

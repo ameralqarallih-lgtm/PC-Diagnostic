@@ -223,7 +223,7 @@ public sealed partial class ProcessCollector : IProcessCollector
         var seconds = elapsed.TotalSeconds;
         return totals.ToDictionary(
             t => t.Key,
-            t => new ProcessTrueIo(t.Value.DiskReadBytes / seconds, t.Value.DiskWriteBytes / seconds, t.Value.NetReceiveBytes / seconds, t.Value.NetSendBytes / seconds));
+            t => new ProcessTrueIo(t.Value.DiskReadBytes / seconds, t.Value.DiskWriteBytes / seconds, t.Value.NetReceiveBytes / seconds, t.Value.NetSendBytes / seconds, t.Value.NetRetransmits / seconds));
     }
 
     private IEnumerable<ProcessIdentityDetails> Enrich(Dictionary<ProcessKey, Current> current)

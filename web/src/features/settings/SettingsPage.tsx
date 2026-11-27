@@ -215,6 +215,30 @@ export function SettingsPage() {
                   onChange={(v) => update('recorder', { blackBox: v })}
                 />
               )}
+              <ToggleRow
+                label="Game frame rates"
+                help="While a game is in front, full screen or in a window, its frames are counted each second: the frames it sends (frame rate, longest frame, stutters) from the graphics card's present events, and the frames that reach the screen from PresentMon (shipped with PC Diagnostic): nothing is added to the game. A drop of 40 % below its usual frame rate, or a run of stutters, becomes an incident whose findings say what else changed. Gaming lists the games it recognized and lets you add or leave out a program. Needs the recorder to run as administrator."
+                checked={draft.recorder.frameRates ?? true}
+                onChange={(v) => update('recorder', { frameRates: v })}
+              />
+              <ToggleRow
+                label="Connection checks"
+                help="A ping each second to the router, the provider's first hop and the internet (1.1.1.1), and a DNS lookup every 10 s, so lost packets and slow hops are seen and placed: the home network, the provider, or beyond. 16 bytes each; nothing about the PC is sent."
+                checked={draft.recorder.connectionChecks ?? true}
+                onChange={(v) => update('recorder', { connectionChecks: v })}
+              />
+              <ToggleRow
+                label="Measure driver latency by itself"
+                help="When a processor spends almost a third of its time or more in drivers' DPCs or interrupts, or a game stutters, the drivers are timed for 10 s (at most every 15 minutes) and the slowest is named, as LatencyMon does. System › Latency measures on request either way."
+                checked={draft.recorder.driverLatency ?? true}
+                onChange={(v) => update('recorder', { driverLatency: v })}
+              />
+              <ToggleRow
+                label="Quality history"
+                help="A minute-by-minute summary of game frame rates, the connection and driver time, and each game session, kept also while the recorder only watches (a few KB a day), for the Gaming and Network pages and System › Latency."
+                checked={draft.recorder.qualityHistory ?? true}
+                onChange={(v) => update('recorder', { qualityHistory: v })}
+              />
               {draft.recorder.mode === 'Scheduled' && (
                 <div className="pb-3">
                   <ScheduleEditor schedule={draft.recorder.schedule} onChange={(schedule) => update('recorder', { schedule })} />

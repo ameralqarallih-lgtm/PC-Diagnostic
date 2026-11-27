@@ -62,6 +62,14 @@ $pawnIO = @{
     Url = 'https://github.com/namazso/PawnIO.Setup/releases/download/2.2.0/PawnIO_setup.exe'
     Sha256 = '1F519A22E47187F70A1379A48CA604981C4FCF694F4E65B734AAA74A9FBA3032'
 }
+# PresentMon (Intel, MIT): the console program the recorder runs while a game is in front, to count the frames that reach
+# the screen (PresentMonRunner finds it at ..\tools\presentmon). Signed by Intel; the signer is checked too.
+$presentMon = @{
+    Version = '2.6.0'
+    Url = 'https://github.com/GameTechDev/PresentMon/releases/download/v2.6.0/PresentMon-2.6.0-x64.exe'
+    Sha256 = 'B2A706BC6AD475749E3B7E3409263AA1E6906D45BDCF993F6DBC0F660188F1AF'
+    Signer = 'O=Intel Corporation'
+}
 # PC Diagnostic Storage (SeaweedFS, Apache-2.0): the same release and hashes as LocalObjectStore.cs. Its releases are not
 # Authenticode-signed: the archive and weed.exe in it are checked by their pinned SHA-256 instead.
 $seaweedFS = @{
@@ -128,6 +136,11 @@ if (-not (Test-Path $iscc)) {
 Write-Host "Inno Setup $($inno.Version): $iscc"
 $pawnSetup = Join-Path $tools "pawnio-$($pawnIO.Version)\PawnIO_setup.exe"
 Get-Pinned $pawnIO $pawnSetup
+$presentMonExe = Join-Path $tools "presentmon-$($presentMon.Version)\PresentMon-$($presentMon.Version)-x64.exe"
+Get-Pinned $presentMon $presentMonExe
+if ((Get-AuthenticodeSignature $presentMonExe).SignerCertificate.Subject -notmatch [regex]::Escape($presentMon.Signer)) {
+    throw "PresentMon is not signed by Intel."
+}
 $seaweedZip = Join-Path $tools "seaweedfs-$($seaweedFS.Version)\windows_amd64.zip"
 Get-PinnedUnsigned $seaweedFS $seaweedZip
 
@@ -169,6 +182,10 @@ if ($ReportEndpoint) {
     $json | ConvertTo-Json -Depth 10 | Set-Content -Encoding utf8 $appsettings
 }
 Copy-Item $pawnSetup (Join-Path $stage 'PawnIO_setup.exe')
+# PresentMon, beside the program folders (PresentMonRunner finds it at ..\tools\presentmon\PresentMon.exe).
+$presentMonFolder = Join-Path $stage 'tools\presentmon'
+New-Item -ItemType Directory -Force -Path $presentMonFolder | Out-Null
+Copy-Item $presentMonExe (Join-Path $presentMonFolder 'PresentMon.exe') -Force
 # SeaweedFS's weed.exe, beside the program folders (LocalObjectStore.BundledExe finds it at ..\tools\seaweedfs).
 $weedFolder = Join-Path $stage 'tools\seaweedfs'
 New-Item -ItemType Directory -Force -Path $weedFolder | Out-Null
@@ -199,7 +216,7 @@ $dotnetVersion = ($runtimeConfig.runtimeOptions.includedFrameworks | Where-Objec
 # ---- 3. Notices --------------------------------------------------------------------------------------------
 Step "Third-party notices (.NET $dotnetVersion)"
 & (Join-Path $PSScriptRoot 'Generate-Notices.ps1') -Output (Join-Path $stage 'THIRD-PARTY-NOTICES.txt') -DotnetVersion $dotnetVersion `
-    -PawnIOVersion $pawnIO.Version -InnoVersion $inno.Version -SeaweedFSVersion $seaweedFS.Version -Root $root
+    -PawnIOVersion $pawnIO.Version -InnoVersion $inno.Version -SeaweedFSVersion $seaweedFS.Version -PresentMonVersion $presentMon.Version -Root $root
 
 # ---- 4. Signing (optional) ---------------------------------------------------------------------------------
 $signArgs = @()

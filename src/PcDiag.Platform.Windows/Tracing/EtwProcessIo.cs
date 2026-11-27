@@ -157,7 +157,7 @@ public sealed unsafe partial class EtwProcessIo(ElevationInfo elevation) : IProc
             _totals = [];
         }
 
-        return taken.ToDictionary(kv => kv.Key, kv => new ProcessIoTotals(kv.Value.DiskRead, kv.Value.DiskWrite, kv.Value.NetReceive, kv.Value.NetSend));
+        return taken.ToDictionary(kv => kv.Key, kv => new ProcessIoTotals(kv.Value.DiskRead, kv.Value.DiskWrite, kv.Value.NetReceive, kv.Value.NetSend, kv.Value.Retransmits));
     }
 
     /// <inheritdoc />
@@ -203,11 +203,16 @@ public sealed unsafe partial class EtwProcessIo(ElevationInfo elevation) : IProc
     }
 
     /// <summary>
-    /// Kernel-Network TCP/UDP send (10, 26, 42, 58) and receive (11, 27, 43, 59) over IPv4 and IPv6: PID (UInt32),
-    /// size (UInt32), then the addresses.
+    /// Kernel-Network TCP/UDP send (10, 26, 42, 58) and receive (11, 27, 43, 59) over IPv4 and IPv6, and TCP
+    /// retransmits (14, 30): PID (UInt32), size (UInt32), then the addresses. A retransmit counts one segment.
     /// </summary>
     internal static Transfer? Network(ushort id, ReadOnlySpan<byte> data)
     {
+        if (id is 14 or 30)
+        {
+            return data.Length >= 8 ? new Transfer((int)BitConverter.ToUInt32(data), Kind.Retransmit, 1) : null;
+        }
+
         var receive = id is 11 or 27 or 43 or 59;
         var send = id is 10 or 26 or 42 or 58;
         if ((!receive && !send) || data.Length < 8)
@@ -250,6 +255,9 @@ public sealed unsafe partial class EtwProcessIo(ElevationInfo elevation) : IProc
                 case Kind.NetReceive:
                     totals.NetReceive += bytes;
                     break;
+                case Kind.Retransmit:
+                    totals.Retransmits += bytes;
+                    break;
                 default:
                     totals.NetSend += bytes;
                     break;
@@ -263,6 +271,7 @@ public sealed unsafe partial class EtwProcessIo(ElevationInfo elevation) : IProc
         DiskWrite,
         NetReceive,
         NetSend,
+        Retransmit,
     }
 
     private sealed class Totals
@@ -271,5 +280,6 @@ public sealed unsafe partial class EtwProcessIo(ElevationInfo elevation) : IProc
         public long DiskWrite;
         public long NetReceive;
         public long NetSend;
+        public long Retransmits;
     }
 }

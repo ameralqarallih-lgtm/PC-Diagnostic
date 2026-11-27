@@ -40,9 +40,18 @@ public sealed class SampleFrameBuilder
     /// <summary>Display slot (only filled when something changed).</summary>
     public DisplaySample? Display { get; set; }
 
+    /// <summary>Game frame rate slot (only while a game is in front).</summary>
+    public FrameSample? Frames { get; set; }
+
+    /// <summary>Connection quality slot.</summary>
+    public ConnectionSample? Connection { get; set; }
+
+    /// <summary>Driver latency slot (only when a measurement finished).</summary>
+    public DriverLatencySample? DriverLatency { get; set; }
+
     /// <summary>Creates the frame.</summary>
     public SampleFrame Build(long sequence, DateTimeOffset timestamp, TickDiagnostics diagnostics, bool recorded = true, bool watched = false) =>
-        new(sequence, timestamp, Cpu, Memory, Gpu, Disk, Network, Processes, Sensors, diagnostics, Services, Inventory, Events, Display, recorded, watched);
+        new(sequence, timestamp, Cpu, Memory, Gpu, Disk, Network, Processes, Sensors, diagnostics, Services, Inventory, Events, Display, recorded, watched, Frames, Connection, DriverLatency);
 }
 
 /// <summary>

@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Runtime.Intrinsics;
 using PcDiag.Core.Overlay;
 
 namespace PcDiag.Agent.Overlay;
@@ -23,6 +24,9 @@ internal sealed class AnimatedPicture : IDisposable
     // Without the budget: the frames last decoded (the one on show and the next), by index.
     private readonly List<(int Index, Bitmap? Frame)> _recent = [];
     private Bitmap? _blend;
+    // What the blend shows (frame and weight): asked again for the same, it is given as it is. A refresh and a motion
+    // frame of a USB screen, or two panels with the same picture, often ask for the same moment.
+    private (int Index, int Weight)? _blendOf;
 
     private AnimatedPicture(byte[] bytes, OverlayAnimation animation)
     {
@@ -70,9 +74,15 @@ internal sealed class AnimatedPicture : IDisposable
             {
                 _blend?.Dispose();
                 _blend = new Bitmap(frame.Width, frame.Height, PixelFormat.Format32bppPArgb);
+                _blendOf = null;
             }
 
-            Blend(frame, next, weight, _blend);
+            if (_blendOf != (index, weight))
+            {
+                Blend(frame, next, weight, _blend);
+                _blendOf = (index, weight);
+            }
+
             return _blend;
         }
     }
@@ -106,9 +116,10 @@ internal sealed class AnimatedPicture : IDisposable
 
     /// <summary>
     /// <paramref name="to"/> = <paramref name="a"/> moved <paramref name="weight"/>/256 of the way to <paramref name="b"/>,
-    /// pixel by pixel (two channels at a time in one 32-bit sum: about a millisecond for a 1920 × 480 frame).
+    /// pixel by pixel (two channels at a time in one 32-bit sum, 8 pixels at a time where the processor can: the same
+    /// sums either way).
     /// </summary>
-    private static void Blend(Bitmap a, Bitmap b, int weight, Bitmap to)
+    internal static void Blend(Bitmap a, Bitmap b, int weight, Bitmap to)
     {
         var rect = new Rectangle(0, 0, a.Width, a.Height);
         var da = a.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppPArgb);
@@ -125,7 +136,8 @@ internal sealed class AnimatedPicture : IDisposable
                     var pa = (uint*)((byte*)da.Scan0 + ((long)y * da.Stride));
                     var pb = (uint*)((byte*)db.Scan0 + ((long)y * db.Stride));
                     var pt = (uint*)((byte*)dt.Scan0 + ((long)y * dt.Stride));
-                    for (var x = 0; x < rect.Width; x++)
+                    var x = BlendVectors(pa, pb, pt, rect.Width, keep, take);
+                    for (; x < rect.Width; x++)
                     {
                         uint ca = pa[x], cb = pb[x];
                         var rb = ((((ca & 0x00FF00FFu) * keep) + ((cb & 0x00FF00FFu) * take)) >> 8) & 0x00FF00FFu;
@@ -141,6 +153,44 @@ internal sealed class AnimatedPicture : IDisposable
             b.UnlockBits(db);
             to.UnlockBits(dt);
         }
+    }
+
+    /// <summary>The blend of a row 8 (or 4) pixels at a time; how many pixels it did (the rest are done one by one).</summary>
+    private static unsafe int BlendVectors(uint* pa, uint* pb, uint* pt, int width, uint keep, uint take)
+    {
+        var x = 0;
+        if (Vector256.IsHardwareAccelerated)
+        {
+            var low = Vector256.Create(0x00FF00FFu);
+            var high = Vector256.Create(0xFF00FF00u);
+            var k = Vector256.Create(keep);
+            var t = Vector256.Create(take);
+            for (; x <= width - 8; x += 8)
+            {
+                var ca = Vector256.Load(pa + x);
+                var cb = Vector256.Load(pb + x);
+                var rb = Vector256.ShiftRightLogical(((ca & low) * k) + ((cb & low) * t), 8) & low;
+                var ag = ((Vector256.ShiftRightLogical(ca, 8) & low) * k) + ((Vector256.ShiftRightLogical(cb, 8) & low) * t);
+                (rb | (ag & high)).Store(pt + x);
+            }
+        }
+        else if (Vector128.IsHardwareAccelerated)
+        {
+            var lo = Vector128.Create(0x00FF00FFu);
+            var hi = Vector128.Create(0xFF00FF00u);
+            var k = Vector128.Create(keep);
+            var t = Vector128.Create(take);
+            for (; x <= width - 4; x += 4)
+            {
+                var ca = Vector128.Load(pa + x);
+                var cb = Vector128.Load(pb + x);
+                var rb = Vector128.ShiftRightLogical(((ca & lo) * k) + ((cb & lo) * t), 8) & lo;
+                var ag = ((Vector128.ShiftRightLogical(ca, 8) & lo) * k) + ((Vector128.ShiftRightLogical(cb, 8) & lo) * t);
+                (rb | (ag & hi)).Store(pt + x);
+            }
+        }
+
+        return x;
     }
 
     private Bitmap? Decode(int index)
@@ -182,6 +232,7 @@ internal sealed class AnimatedPicture : IDisposable
             _recent.Clear();
             _blend?.Dispose();
             _blend = null;
+            _blendOf = null;
         }
     }
 }

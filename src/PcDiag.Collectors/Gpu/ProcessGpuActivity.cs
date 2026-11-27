@@ -27,4 +27,19 @@ public sealed class ProcessGpuActivity
 
         return most;
     }
+
+    /// <summary>The share of a GPU's 3D engine this process uses, when 3D is its busiest engine; 0 otherwise.</summary>
+    public double ThreeDPercentOf(int processId)
+    {
+        double most = 0;
+        foreach (var usage in _latest)
+        {
+            if (usage.ProcessId == processId && usage.UtilizationPercent > most && usage.Engine is { } engine && engine.Contains("3D", StringComparison.OrdinalIgnoreCase))
+            {
+                most = usage.UtilizationPercent;
+            }
+        }
+
+        return most;
+    }
 }

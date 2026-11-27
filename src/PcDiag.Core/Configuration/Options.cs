@@ -75,6 +75,37 @@ public sealed class RecorderOptions
     /// </summary>
     public bool BlackBox { get; set; } = true;
 
+    /// <summary>
+    /// Game frame rates: while a game is in front (full screen, borderless or windowed; see <see cref="Games"/>), its
+    /// frames are counted each second (frame rate, longest frame, stutters) with the GPU's present events, and with
+    /// PresentMon the frames that reached the screen.
+    /// </summary>
+    public bool FrameRates { get; set; } = true;
+
+    /// <summary>Programs (process names, e.g. "MyGame") always counted as games when they are in front, also windowed.</summary>
+    public List<string> Games { get; set; } = [];
+
+    /// <summary>Programs never counted as games (the user said "Not a game").</summary>
+    public List<string> NotGames { get; set; } = [];
+
+    /// <summary>
+    /// Connection checks: a ping each second to the router, the provider's first hop and the internet, and a DNS lookup
+    /// every 10 s, so lost packets and slow hops are seen and placed (the home network, the provider or beyond).
+    /// </summary>
+    public bool ConnectionChecks { get; set; } = true;
+
+    /// <summary>
+    /// Driver latency measured by itself: when a processor spends long in drivers' DPCs or interrupts, or the game
+    /// stutters, the drivers are timed for 10 s (at most once every 15 minutes).
+    /// </summary>
+    public bool DriverLatency { get; set; } = true;
+
+    /// <summary>
+    /// Quality history: a minute-by-minute summary of game frame rates, the connection and driver latency, and each game
+    /// session, kept also while the recorder only watches (a few KB a day).
+    /// </summary>
+    public bool QualityHistory { get; set; } = true;
+
     /// <summary>History preserved before an incident, in minutes (1, 5, 10, 15 or 30).</summary>
     public int PreIncidentMinutes { get; set; } = 10;
 

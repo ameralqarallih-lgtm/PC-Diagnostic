@@ -92,7 +92,7 @@ public sealed unsafe class EtwFrameMonitor(ElevationInfo elevation, TimeProvider
             return null;
         }
 
-        return new FrameStats(stats.ProcessId, NameOf(stats.ProcessId), stats.Fps, stats.FrameTimeMs, stats.Low1Fps, stats.Foreground);
+        return new FrameStats(stats.ProcessId, NameOf(stats.ProcessId), stats.Fps, stats.FrameTimeMs, stats.Low1Fps, stats.Foreground, stats.WorstFrameTimeMs, stats.Stutters);
     }
 
     /// <summary>An app's name, looked up once per process.</summary>

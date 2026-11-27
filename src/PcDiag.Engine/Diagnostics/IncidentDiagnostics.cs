@@ -21,7 +21,7 @@ public sealed partial class IncidentDiagnostics
     /// Version of the analyzers. Finished incidents analyzed by an older version (or never) are analyzed again when
     /// the Agent starts, so improvements reach existing incidents.
     /// </summary>
-    public const int AnalyzerVersion = 4;
+    public const int AnalyzerVersion = 5;
 
     /// <summary>Most findings in a summary.</summary>
     public const int MaxFindings = 60;
@@ -39,6 +39,9 @@ public sealed partial class IncidentDiagnostics
         new MemoryPressureAnalyzer(),
         new DiskLatencyAnalyzer(),
         new NetworkAnalyzer(),
+        new ConnectionAnalyzer(),
+        new FrameRateAnalyzer(),
+        new DriverLatencyAnalyzer(),
         new ProcessLifecycleAnalyzer(),
         new ThermalAnalyzer(),
     ];

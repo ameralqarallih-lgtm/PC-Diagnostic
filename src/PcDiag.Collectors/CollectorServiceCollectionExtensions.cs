@@ -39,6 +39,21 @@ public static class CollectorServiceCollectionExtensions
         services.AddPolledCollector<GpuCollector, GpuSample>((frame, sample) => frame.Gpu = sample);
         services.AddPolledCollector<DiskCollector, DiskSample>((frame, sample) => frame.Disk = sample);
         services.AddPolledCollector<NetworkCollector, NetworkSample>((frame, sample) => frame.Network = sample);
+
+        // The connection's quality (router, provider and internet pings, DNS): its pings run from the start (the gaming
+        // readings show them), so it is a hosted service too.
+        services.AddPolledCollector<ConnectionCollector, ConnectionSample?>((frame, sample) => frame.Connection = sample);
+        services.TryAddSingleton<Core.Overlay.ILatencyProbe>(sp => sp.GetRequiredService<ConnectionCollector>());
+        services.AddHostedService(sp => sp.GetRequiredService<ConnectionCollector>());
+
+        // Game frame rates (the frame monitor is registered by the host), and driver latency (a kernel trace on demand).
+        services.TryAddSingleton<Gaming.GameRecognizer>();
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<Core.Overlay.IDisplayedFrames, PresentMonRunner>());
+        services.AddPolledCollector<Gaming.FrameCollector, FrameSample?>((frame, sample) => frame.Frames = sample);
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IDriverLatencyTracer, EtwDriverLatency>());
+        services.AddPolledCollector<Latency.DriverLatencyCollector, DriverLatencySample?>((frame, sample) => frame.DriverLatency = sample);
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<ISampleConsumer, Latency.DriverLatencyCollector>(sp => sp.GetRequiredService<Latency.DriverLatencyCollector>()));
+        services.TryAddSingleton<IDriverLatencyMonitor>(sp => sp.GetRequiredService<Latency.DriverLatencyCollector>());
         services.AddPolledCollector<DisplayCollector, DisplaySample?>((frame, sample) => frame.Display = sample);
         services.TryAddSingleton<IDisplayCollector>(sp => sp.GetRequiredService<DisplayCollector>());
 

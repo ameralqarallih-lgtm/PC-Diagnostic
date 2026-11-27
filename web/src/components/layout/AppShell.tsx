@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router';
-import { Activity, Cpu, Database, Gauge, LayoutDashboard, MonitorSmartphone, Moon, Settings, PawPrint, PlugZap, Siren, Stethoscope, Sun, Wand2, type LucideIcon } from 'lucide-react';
+import { Activity, Cpu, Database, Gamepad2, Gauge, LayoutDashboard, MonitorSmartphone, Moon, Network, Settings, PawPrint, PlugZap, Siren, Stethoscope, Sun, Wand2, type LucideIcon } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useState, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
@@ -14,7 +14,7 @@ import { ShellV2 } from './ShellV2';
 import { cn } from '@/lib/utils';
 
 interface NavItem {
-  to: '/' | '/history' | '/incidents' | '/diagnostics' | '/system' | '/drivers' | '/tune-up' | '/on-screen' | '/characters' | '/generator' | '/storage' | '/settings';
+  to: '/' | '/history' | '/incidents' | '/diagnostics' | '/gaming' | '/network' | '/system' | '/drivers' | '/tune-up' | '/on-screen' | '/characters' | '/generator' | '/storage' | '/settings';
   label: string;
   /** Label in the phone's bottom navigation, when shorter. */
   short?: string;
@@ -28,6 +28,8 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: '/history', label: 'History', icon: Activity },
   { to: '/incidents', label: 'Incidents', icon: Siren },
   { to: '/diagnostics', label: 'Diagnostics', short: 'Diagnose', icon: Stethoscope },
+  { to: '/gaming', label: 'Gaming', short: 'Games', icon: Gamepad2 },
+  { to: '/network', label: 'Network', icon: Network },
   { to: '/system', label: 'System', icon: Cpu },
   { to: '/drivers', label: 'Drivers', icon: PlugZap, sidebarOnly: true },
   { to: '/tune-up', label: 'Tune-up', icon: Gauge },

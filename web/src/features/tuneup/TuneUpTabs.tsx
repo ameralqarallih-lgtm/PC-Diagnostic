@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Menu, type MenuItem } from '@/components/ui/menu';
 import { CleanupTree } from './CleanupTree';
 import type { CleanupTarget, ControlService, StartupEntry, TuneUpReport } from '@/lib/api/types';
-import { formatBytes } from '@/lib/format';
+import { formatBytes, formatTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { PendingAction } from './ConfirmAction';
 import type { Recommendation, TuneUpTab } from './recommend';
@@ -276,7 +276,20 @@ const CLEANUP_COLUMNS: Column<CleanupTarget>[] = [
 ];
 
 /** What can be removed, measured; the safe ones are selected; one button cleans. */
-export function CleanupTab({ targets, ask, onRescan, scanning }: { targets: CleanupTarget[] | undefined; ask: (action: PendingAction) => void; onRescan: () => void; scanning: boolean }) {
+export function CleanupTab({
+  targets,
+  ask,
+  onRescan,
+  scanning,
+  measuredAt = null,
+}: {
+  targets: CleanupTarget[] | undefined;
+  ask: (action: PendingAction) => void;
+  onRescan: () => void;
+  scanning: boolean;
+  /** When the sizes were measured (a scan is kept 15 minutes). */
+  measuredAt?: string | null;
+}) {
   const control = useControlAction();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Set<string> | null>(null);
@@ -384,6 +397,7 @@ export function CleanupTab({ targets, ask, onRescan, scanning }: { targets: Clea
         <Button variant="outline" disabled={scanning} onClick={onRescan}>
           {scanning ? 'Measuring…' : 'Measure again'}
         </Button>
+        {measuredAt && !scanning && <span className="text-xs text-muted">Sizes measured at {formatTime(measuredAt)}</span>}
       </div>
     </div>
   );

@@ -16,10 +16,14 @@ namespace PcDiag.Storage.Sqlite.Reading;
 public sealed class IncidentEvidenceReader(IncidentReader incidents, HistoryReader history, SqliteConnectionFactory connectionFactory, DatabaseInitializer initializer)
     : IIncidentEvidenceSource
 {
+    private readonly QualityReader _quality = new(connectionFactory, history);
+
     /// <summary>System-wide series the analyzers use.</summary>
     internal static readonly HashSet<string> SystemSeries = new(StringComparer.Ordinal)
     {
         "cpu", "memory", "gpu", "vram", "disk", "cpu.temp", "cpu.limit", "memory.commit", "memory.available", "memory.hardfaults",
+        "cpu.maxcore", "game.fps", "game.usual", "game.worst", "game.stutters", "game.shown", "game.dropped", "game.gpubusy", "game.cpubusy", "latency.dpc", "latency.isr",
+        "conn.router", "conn.provider", "conn.internet", "conn.loss", "conn.router_loss", "conn.provider_loss", "conn.dns", "conn.dns_failed",
     };
 
     /// <summary>Per-device series the analyzers use, by device prefix.</summary>
@@ -59,8 +63,12 @@ public sealed class IncidentEvidenceReader(IncidentReader incidents, HistoryRead
             .Select(t => new IncidentTrigger(UnixTime.FromUnixMs(t.Ts), t.Source, t.UserType, t.RuleId, t.Detail, t.Note))
             .ToList();
 
+        // Programs in the minute before the moment against the 30 s before it and 15 s after it; the driver measurements.
+        var center = UnixTime.ToUnixMs(summary.CenterAt);
+        var processes = await _quality.ProcessActivityAsync(database, Math.Max(detail.From, center - 90_000), center - 30_000, center + 15_000, cancellationToken).ConfigureAwait(false);
+        var latency = await _quality.DriverLatencyAsync(database, detail.From, detail.To, cancellationToken).ConfigureAwait(false);
         return new IncidentEvidence(key, summary.CenterAt, UnixTime.FromUnixMs(detail.From), UnixTime.FromUnixMs(detail.To), summary.Source, summary.UserType,
-            summary.SnapshotOnly, tracks, events, anomalies, triggers, RecordedItems(detail.Info.GetValueOrDefault("recording_selection")));
+            summary.SnapshotOnly, tracks, events, anomalies, triggers, RecordedItems(detail.Info.GetValueOrDefault("recording_selection")), processes, latency);
     }
 
     /// <summary>A custom recording's items (a JSON array); null when everything was recorded or the value is unreadable.</summary>

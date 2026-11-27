@@ -3,6 +3,40 @@
 All notable changes to PC Diagnostic & Incident Recorder. Each release's installer is on the
 [releases page](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases).
 
+## [1.0.12] - 2026-11-27
+
+### Added
+- **Gaming**: every game session is kept, also in the default Manual mode (average, 1 % low, drop seconds, stutters a
+  minute). A drop is measured against the game's usual frame rate and a stutter against the frames around it, so a slow
+  stretch is one drop and not hundreds of stutters. Each drop shows what else was measured while it lasted (the GPU's
+  load, clock and memory, the busiest processor, paging, the drives, drivers and other programs), and repeated drops or
+  stutters make an incident. [#24](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/24)
+- **Frames shown, not only sent**: the frames that reached the screen are counted through Intel's PresentMon (2.6.0,
+  MIT, shipped with the installer), with frames sent and never shown, the longest time one image stayed on the screen,
+  display latency, the present mode, and the GPU's and the CPU's share of each frame, which tells which side limited
+  the frame rate. [#28](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/28)
+- **Driver latency (DPC/ISR)**: the time Windows spends in drivers' deferred procedure calls and interrupts is recorded
+  each second, also for the busiest processor, and *System › Latency* measures each driver (counts, the longest runs,
+  runs of 500 µs and 1 ms) on request, and by itself when that time is high or a game stutters. [#25](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/25)
+- **Network**: each second, round trips and losses to the router, the provider's first hop and the internet, so a
+  problem is placed at home, on the provider's line or further out; DNS checks past Windows' cache; each program's TCP
+  retransmits. The *Network* page shows the last hour, day or week, and a lost connection makes an incident.
+  [#26](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/26)
+
+### Fixed
+- **Games played in a window are counted**, not only those covering the screen: the games you mark, those Windows lists
+  as games, those installed in a game library (Steam, Epic, Riot, GOG, Xbox…) and programs drawing mostly 3D. Browsers
+  and video players are left out, and any program can be marked as a game or as not one. [#27](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/27)
+- **The recorder uses about half the CPU it did** (on one PC from 56–70 s of CPU a minute to 21–32 s), with every
+  reading, panel and frame kept:
+  - the hardware check read every device Windows had ever known (19,774 there) every 20 s, about half a processor; it
+    now reads them when a device arrives, leaves or reports a problem, and every 10 minutes. [#29](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/29)
+  - Tune-up measured every cache again each time its page came to the front (about 18 s of CPU); a scan is kept 15
+    minutes, the page says when it was measured, and *Measure again* and a clean-up measure afresh. [#30](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/30)
+  - a USB screen with an animated background drew the panel's background again for every step of a gliding value; it
+    now draws only the readings (the same pixels), and the animated picture's blend is done 8 pixels at a time.
+    [#31](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/31)
+
 ## [1.0.11] - 2026-11-08
 
 ### Added

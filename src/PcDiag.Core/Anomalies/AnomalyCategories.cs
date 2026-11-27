@@ -61,11 +61,11 @@ public static class AnomalyCategories
 
         return m switch
         {
-            _ when m.StartsWith("cpu", StringComparison.Ordinal) => "processor",
+            _ when m.StartsWith("cpu", StringComparison.Ordinal) || m.StartsWith("latency", StringComparison.Ordinal) => "processor",
             _ when m.StartsWith("memory", StringComparison.Ordinal) => "memory",
-            _ when m.StartsWith("gpu", StringComparison.Ordinal) => "graphics",
+            _ when m.StartsWith("gpu", StringComparison.Ordinal) || m.StartsWith("game", StringComparison.Ordinal) => "graphics",
             _ when m.StartsWith("disk", StringComparison.Ordinal) || m.StartsWith("volume", StringComparison.Ordinal) => "storage",
-            _ when m.StartsWith("net", StringComparison.Ordinal) => "network",
+            _ when m.StartsWith("net", StringComparison.Ordinal) || m.StartsWith("conn", StringComparison.Ordinal) => "network",
             _ => "sensors",
         };
     }

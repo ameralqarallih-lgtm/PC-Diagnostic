@@ -4,7 +4,7 @@
 
 <br>
 
-[![Download](https://img.shields.io/badge/Download-v1.0.11%20installer-38bdf8?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/download/v1.0.11/PcDiagnostic-Setup-1.0.11.exe)
+[![Download](https://img.shields.io/badge/Download-v1.0.12%20installer-38bdf8?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/download/v1.0.12/PcDiagnostic-Setup-1.0.12.exe)
 
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 ![Windows 10 / 11](https://img.shields.io/badge/Windows-10%20%7C%2011%20x64-0078D4?logo=windows&logoColor=white)
@@ -58,11 +58,11 @@ PC Diagnostic records **all the time**, at a cost it shows you (it slows itself 
 <tr>
 <td width="70%">
 
-### PC Diagnostic **v1.0.11** for Windows 10/11 (x64)
+### PC Diagnostic **v1.0.12** for Windows 10/11 (x64)
 
-<img src="docs/icons/download.svg" width="18" height="18" alt=""> **[PcDiagnostic-Setup-1.0.11.exe](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/download/v1.0.11/PcDiagnostic-Setup-1.0.11.exe)** (197 MB) · [all releases](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases) · [what changed](CHANGELOG.md)
+<img src="docs/icons/download.svg" width="18" height="18" alt=""> **[PcDiagnostic-Setup-1.0.12.exe](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases/download/v1.0.12/PcDiagnostic-Setup-1.0.12.exe)** (198 MB) · [all releases](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases) · [what changed](CHANGELOG.md)
 
-SHA-256: `CB680CBC06A492607FA911B2876CE6C86B1F959BD5FBBCFB6E032BC6C2389252`
+SHA-256: `61D8DE32C78B5608BE9924103E058CE360951B91AD0378384886C698F750C9D8`
 
 One installer, nothing else to install: the .NET runtime is inside, and the sensor driver (PawnIO) is offered during setup.
 
@@ -80,7 +80,7 @@ One installer, nothing else to install: the .NET runtime is inside, and the sens
 </table>
 
 > [!NOTE]
-> The installer is not code-signed yet, so Windows SmartScreen may say *"Windows protected your PC"*. Choose **More info → Run anyway**, or check the SHA-256 above first (`Get-FileHash .\PcDiagnostic-Setup-1.0.11.exe`).
+> The installer is not code-signed yet, so Windows SmartScreen may say *"Windows protected your PC"*. Choose **More info → Run anyway**, or check the SHA-256 above first (`Get-FileHash .\PcDiagnostic-Setup-1.0.12.exe`).
 
 ---
 
@@ -121,12 +121,13 @@ One installer, nothing else to install: the .NET runtime is inside, and the sens
 | **CPU & memory** | Load per core, clocks, temperature and package power, memory in use, commit, compression, page faults. |
 | **GPU** (every adapter) | Engine utilization, VRAM, temperature and hotspot, clocks, power and its limit, fans, throttle reasons (NVML for NVIDIA, the RTX 50 series hotspot from its thermal registers through PawnIO, D3DKMT for any vendor). |
 | **Disks** | Throughput, IOPS, latency, queue length, active time, free space, health and wear (SMART / NVMe log). |
-| **Network** | Throughput per interface, errors, link speed, Wi-Fi signal, latency. |
+| **Network** | Throughput per interface, errors, link speed, Wi-Fi signal; each second, round trips and losses to the router, the provider's first hop and the internet (so a problem is placed at home, on the line or further out), DNS checks past Windows' cache, and each program's TCP retransmits. |
 | **Processes** | Every process every 2 s: CPU, memory, disk and network I/O, GPU; started, stopped and hung programs. |
 | **Windows** | Classified events: GPU driver resets, app crashes and hangs, blue screens, unexpected restarts, WHEA hardware errors, disk and NTFS errors, service failures, sleep and resume. |
 | **Displays** | Active monitors, resolution, refresh rate, HDR, orientation, and every change with the moment Windows reported it. |
 | **Sensors** | Motherboard, fans, voltages and coolers through LibreHardwareMonitor (well over a hundred sensors on a typical desktop). |
-| **Games** | Frame rate, frame time and stutter of the app in front (Enhanced mode adds a flight recorder and true per-process I/O through ETW). |
+| **Games** | Every game session, full screen or windowed: frames sent and frames shown on the screen (through Intel's PresentMon), 1 % low, stutters and drops against the game's usual rate, display latency, the present mode and which side limited each frame (GPU or CPU). Each drop comes with what else was measured while it lasted (Enhanced mode adds a flight recorder and true per-process I/O through ETW). |
+| **Driver latency** | Time in DPCs and interrupts each second (also of the busiest processor), and a measurement per driver: counts, the longest runs, runs of 500 µs and 1 ms (on request, and by itself when the time is high or a game stutters). |
 
 Recording modes: **Manual**, **Always**, **Scheduled**, or a **custom recording** of only the readings you pick. Even when not recording, it *watches* in memory and starts recording when a problem appears.
 
@@ -158,7 +159,9 @@ Recording modes: **Manual**, **Always**, **Scheduled**, or a **custom recording*
 <details>
 <summary><img src="docs/icons/wrench.svg" width="18" height="18" alt=""> <b>System, tune-up and more</b></summary>
 
-- **System**: hardware, motherboard, devices, drivers (with signatures), every sensor, and why a reading is unavailable.
+- **Gaming**: your game sessions with their frame rate, 1 % low, drops and stutters; each drop with what else happened, and how the frames reached the screen. Mark any program as a game, or as not one.
+- **Network**: for the last hour, day or week, where the connection lost or slowed (home network, provider or further out), DNS, outages and the programs that used the network most.
+- **System**: hardware, motherboard, devices, drivers (with signatures), every sensor, why a reading is unavailable, and **Latency**: the drivers' DPC and interrupt time with a per-driver measurement.
 - **Stability**: every crash Windows logged in the last 30 days, also those not recorded: blue screens with their code in plain words and the module their dump points at (no debugger needed), freezes ended with the power button, how many crash dumps Windows keeps, and Windows' memory test.
 - **Drivers**: install Windows drivers for devices that have none, and keep driver packages.
 - **Tune-up**: advice from what the PC is really doing, startup programs, services and safe clean-up.
@@ -341,6 +344,7 @@ mindmap
 | Component | Version | License | Used for |
 |---|---|---|---|
 | PawnIO | 2.2.0 | GPL-2.0 (shipped unmodified, a separate program) | The driver LibreHardwareMonitor needs for CPU sensors |
+| PresentMon | 2.6.0 | MIT (Intel's signed console program, shipped unmodified) | Frames shown on the screen, display latency and the present mode of the game in front |
 | Inno Setup | 7.1 | Inno Setup License | The installer (portable, nothing installed while building) |
 | SeaweedFS | pinned | Apache-2.0 | Optional local S3-compatible storage |
 | Microsoft Edge (already on Windows) | system | — | PDF reports (headless print) |
@@ -368,7 +372,7 @@ The installer build reads every package it ships, writes `THIRD-PARTY-NOTICES.tx
 
 ### 1. Install and first start
 
-1. Run **PcDiagnostic-Setup-1.0.11.exe** and keep the recommended options:
+1. Run **PcDiagnostic-Setup-1.0.12.exe** and keep the recommended options:
    - **Start the recorder when I sign in**: a scheduled task starts it with administrator rights, without a UAC prompt each time.
    - **Install the PawnIO driver**: needed for CPU temperature and power.
    - *Let my other devices reach the dashboard* is optional (a firewall rule for your local network only).
@@ -456,11 +460,11 @@ cd web; npm run dev                     # http://localhost:5173
 ### Build the installer
 
 ```powershell
-installer\build.ps1 -Version 1.0.11                         # artifacts\installer\PcDiagnostic-Setup-1.0.11.exe
+installer\build.ps1 -Version 1.0.12                         # artifacts\installer\PcDiagnostic-Setup-1.0.12.exe
 installer\build.ps1 -CertificateThumbprint <sha1>           # also signs the programs and the installer
 ```
 
-It fetches the pinned Inno Setup and PawnIO (checked by SHA-256 and signature), publishes both programs self-contained with the latest .NET 10 patch, writes the third-party notices and compiles the setup.
+It fetches the pinned Inno Setup, PawnIO and PresentMon (checked by SHA-256 and signature), publishes both programs self-contained with the latest .NET 10 patch, writes the third-party notices and compiles the setup.
 
 ### Docker (the web host only)
 

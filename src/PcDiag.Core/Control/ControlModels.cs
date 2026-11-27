@@ -138,7 +138,8 @@ public sealed record SystemTuning(
     IReadOnlyList<VolumeSpace> Volumes);
 
 /// <summary>What the tune-up page shows: what can be cleaned and the settings that matter.</summary>
-public sealed record TuneUpReport(DateTimeOffset At, IReadOnlyList<CleanupTarget> Cleanup, SystemTuning System, IReadOnlyList<StartupEntry> Startup);
+/// <param name="CleanupAt">When the clean-up sizes were measured (they are kept a while: measuring the caches is costly).</param>
+public sealed record TuneUpReport(DateTimeOffset At, IReadOnlyList<CleanupTarget> Cleanup, SystemTuning System, IReadOnlyList<StartupEntry> Startup, DateTimeOffset? CleanupAt = null);
 
 /// <summary>The outcome of an action.</summary>
 /// <param name="Ok">It did what was asked (fully or partly).</param>
@@ -273,7 +274,7 @@ public interface ISystemControl
     ControlResult ControlService(string name, string action, string? startType, bool confirmed, bool safe = false);
 
     /// <summary>What the tune-up can do now.</summary>
-    Task<TuneUpReport> ScanAsync(CancellationToken cancellationToken);
+    Task<TuneUpReport> ScanAsync(CancellationToken cancellationToken, bool fresh = false);
 
     /// <summary>Runs one of <see cref="TuneUpActions"/>.</summary>
     /// <param name="safe">Safe mode: leave anything other programs are using now, and say so.</param>

@@ -28,4 +28,25 @@ public sealed class HardwareInventoryTests
         items.Where(i => i.Kind == "network").ShouldAllBe(i => !i.Name.EndsWith("-0000", StringComparison.Ordinal));
         items.Select(i => i.Key).ShouldBeUnique();
     }
+
+    [Fact]
+    public void The_connected_devices_signature_changes_with_an_arrival_a_removal_or_a_problem_and_not_with_order_or_case()
+    {
+        var present = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            [@"USB\VID_046D&PID_C52B\5&1A2B3C&0&2"] = 0,
+            [@"PCI\VEN_10DE&DEV_2B85&SUBSYS_00000000&REV_A1\4&2283F625&0&0008"] = 0,
+            [@"HID\VID_046D&PID_C52B&MI_00\7&3A2F&0&0000"] = 0,
+        };
+        var signature = HardwareInventory.PresentSignature(present);
+
+        // The same devices listed in another order or case: the same signature.
+        var reordered = present.Reverse().ToDictionary(p => p.Key.ToLowerInvariant(), p => p.Value);
+        HardwareInventory.PresentSignature(reordered).ShouldBe(signature);
+
+        // A device arriving, leaving or having a problem: another.
+        HardwareInventory.PresentSignature(new Dictionary<string, int>(present) { [@"USB\VID_0BDA&PID_8153\000001"] = 0 }).ShouldNotBe(signature);
+        HardwareInventory.PresentSignature(present.Skip(1).ToDictionary()).ShouldNotBe(signature);
+        HardwareInventory.PresentSignature(new Dictionary<string, int>(present) { [@"USB\VID_046D&PID_C52B\5&1A2B3C&0&2"] = 43 }).ShouldNotBe(signature);
+    }
 }

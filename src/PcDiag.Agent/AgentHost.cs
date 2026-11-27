@@ -52,10 +52,8 @@ internal static class AgentHost
 
         // Readings on the screens (on-screen display), drawn by the recorder on its desktop; frame rates and round
         // trips for its gaming readings, measured only while they are wanted.
+        // The round trips come from the connection collector (registered with the collectors).
         builder.Services.AddSingleton<Core.Overlay.IFrameMonitor, Platform.Windows.Tracing.EtwFrameMonitor>();
-        builder.Services.AddSingleton<Engine.Overlay.LatencyProbe>();
-        builder.Services.AddSingleton<Core.Overlay.ILatencyProbe>(sp => sp.GetRequiredService<Engine.Overlay.LatencyProbe>());
-        builder.Services.AddHostedService(sp => sp.GetRequiredService<Engine.Overlay.LatencyProbe>());
         builder.Services.AddSingleton<Overlay.OverlayService>();
 
         // The hardware the user expects, checked every few seconds (missing devices, drives, monitors…).

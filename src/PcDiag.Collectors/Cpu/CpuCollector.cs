@@ -32,6 +32,11 @@ public sealed partial class CpuCollector(ILogger<CpuCollector> logger) : ICpuCol
     private PdhCounter? _coreUtility;
     private PdhCounter? _corePerformance;
     private PdhCounter? _coreFrequency;
+    private PdhCounter? _dpcTime;
+    private PdhCounter? _interruptTime;
+    private PdhCounter? _dpcsQueued;
+    private PdhCounter? _coreDpcTime;
+    private PdhCounter? _coreInterruptTime;
     private Reading<double> _maxMhz = Reading<double>.Pending;
 
     /// <inheritdoc />
@@ -71,13 +76,20 @@ public sealed partial class CpuCollector(ILogger<CpuCollector> logger) : ICpuCol
         _corePerformance = Add(@"\Processor Information(*)\% Processor Performance");
         _coreFrequency = Add(@"\Processor Information(*)\Processor Frequency");
 
+        // Drivers holding the processors: DPC and interrupt (ISR) time, in total and per processor.
+        _dpcTime = Add(Total + "% DPC Time");
+        _interruptTime = Add(Total + "% Interrupt Time");
+        _dpcsQueued = Add(Total + "DPCs Queued/sec");
+        _coreDpcTime = Add(@"\Processor Information(*)\% DPC Time");
+        _coreInterruptTime = Add(@"\Processor Information(*)\% Interrupt Time");
+
         _maxMhz = SystemInfo.TryGetMaxProcessorMhz() is { } max ? Reading<double>.Of(max) : Reading<double>.Unavailable(Availability.Unsupported);
 
         // Prime rate counters so the first real tick has two samples to compute from.
         _query.Collect();
 
         // Missing individual counters are reported per metric as Unsupported; the collector itself stays available.
-        const int expectedCounters = 13;
+        const int expectedCounters = 18;
         var detail = _query.Counters.Count < expectedCounters
             ? $"{expectedCounters - _query.Counters.Count} of {expectedCounters} counters unavailable on this system"
             : $"{Environment.ProcessorCount} logical processors";
@@ -114,7 +126,10 @@ public sealed partial class CpuCollector(ILogger<CpuCollector> logger) : ICpuCol
             InterruptsPerSec: Read(_interrupts),
             PackageTemperatureC: Reading<double>.Unavailable(Availability.Unsupported),
             PackagePowerW: Reading<double>.Unavailable(Availability.Unsupported),
-            Cores: ReadCores());
+            Cores: ReadCores(),
+            DpcPercent: ClampPercent(Read(_dpcTime)),
+            InterruptPercent: ClampPercent(Read(_interruptTime)),
+            DpcsPerSec: Read(_dpcsQueued));
 
         return ValueTask.FromResult(sample);
     }
@@ -144,6 +159,8 @@ public sealed partial class CpuCollector(ILogger<CpuCollector> logger) : ICpuCol
 
         var performance = ToLookup(_corePerformance?.GetArray(noCap100: true));
         var frequency = ToLookup(_coreFrequency?.GetArray());
+        var dpc = ToLookup(_coreDpcTime?.GetArray());
+        var interrupt = ToLookup(_coreInterruptTime?.GetArray());
 
         var cores = new List<(int Group, int Number, string Instance, Reading<double> Utility)>();
         foreach (var item in _coreUtility.GetArray(noCap100: true))
@@ -163,7 +180,9 @@ public sealed partial class CpuCollector(ILogger<CpuCollector> logger) : ICpuCol
             var mhz = frequency.TryGetValue(instance, out var f) && performance.TryGetValue(instance, out var p) && f.HasValue && p.HasValue
                 ? Reading<double>.Of(f.Value!.Value * p.Value!.Value / 100.0)
                 : Reading<double>.Unavailable(Availability.Unsupported);
-            result.Add(new CpuCoreSample(i, ClampPercent(utility), mhz));
+            var dpcPercent = dpc.TryGetValue(instance, out var d) ? ClampPercent(d) : default;
+            var interruptPercent = interrupt.TryGetValue(instance, out var q) ? ClampPercent(q) : default;
+            result.Add(new CpuCoreSample(i, ClampPercent(utility), mhz, dpcPercent, interruptPercent));
         }
 
         return result;

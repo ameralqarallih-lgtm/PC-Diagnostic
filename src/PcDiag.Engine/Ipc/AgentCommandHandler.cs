@@ -50,6 +50,7 @@ public sealed partial class AgentCommandHandler
     private readonly Core.Devices.IHardwareWatch? _hardware;
     private readonly Core.Devices.IWindowsDrivers? _windowsDrivers;
     private readonly Core.Stability.IStability? _stability;
+    private readonly IDriverLatencyMonitor? _latency;
 
     /// <summary>Longest service name.</summary>
     private const int MaxServiceNameLength = 256;
@@ -70,8 +71,9 @@ public sealed partial class AgentCommandHandler
         ElevationInfo elevation, TimeProvider timeProvider, ILogger<AgentCommandHandler> logger, IEnumerable<EnhancedModeService>? enhanced = null,
         ISystemControl? control = null, Core.Overlay.IOverlayControl? overlay = null,
         Core.Storage.IStorageControl? storage = null, Core.Devices.IHardwareWatch? hardware = null, Core.Devices.IWindowsDrivers? windowsDrivers = null,
-        Core.Stability.IStability? stability = null)
+        Core.Stability.IStability? stability = null, IDriverLatencyMonitor? latency = null)
     {
+        _latency = latency;
         _windowsDrivers = windowsDrivers;
         _stability = stability;
         _storage = storage;
@@ -203,6 +205,21 @@ public sealed partial class AgentCommandHandler
             if (request.Command is AgentCommands.Stability or AgentCommands.StabilityDumps or AgentCommands.StabilityMemoryTest)
             {
                 return await StabilityAsync(id, request.Command, request.Args, cancellationToken).ConfigureAwait(false);
+            }
+
+            if (request.Command is AgentCommands.DriverLatency or AgentCommands.DriverLatencyMeasure)
+            {
+                if (_latency is null)
+                {
+                    return new AgentResponse(id, false, "This recorder does not measure driver latency.", Status());
+                }
+
+                if (request.Command == AgentCommands.DriverLatencyMeasure && !_latency.MeasureNow() && !_latency.Measuring)
+                {
+                    return new AgentResponse(id, false, _latency.Problem ?? "The measurement could not start.", Status());
+                }
+
+                return new AgentResponse(id, true, Status: Status(), DriverLatency: new Core.Quality.DriverLatencyStatus(_latency.Measuring, _latency.Problem, _latency.Last));
             }
 
             if (request.Command == AgentCommands.RecorderCost)
@@ -434,7 +451,7 @@ public sealed partial class AgentCommandHandler
                 return new AgentResponse(id, true, Status: Status(), Services: _control.Services());
             case AgentCommands.TuneUpScan:
                 await _recorder.KeepLiveViewAsync(cancellationToken).ConfigureAwait(false);
-                return new AgentResponse(id, true, Status: Status(), TuneUp: await _control.ScanAsync(cancellationToken).ConfigureAwait(false));
+                return new AgentResponse(id, true, Status: Status(), TuneUp: await _control.ScanAsync(cancellationToken, fresh: request.Args?.Value == "fresh").ConfigureAwait(false));
             case AgentCommands.CleanupFiles:
             {
                 var items = args.Items ?? [];

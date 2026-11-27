@@ -132,13 +132,19 @@ public static class AgentCommands
     /// <summary>Opens Windows Memory Diagnostic.</summary>
     public const string StabilityMemoryTest = "stability-memory-test";
 
+    /// <summary>Driver latency: whether a measurement is running, why it cannot, and the newest result.</summary>
+    public const string DriverLatency = "driver-latency";
+
+    /// <summary>Starts a driver latency measurement (10 s).</summary>
+    public const string DriverLatencyMeasure = "driver-latency-measure";
+
     /// <summary>All commands.</summary>
     public static IReadOnlySet<string> All { get; } = new HashSet<string>(StringComparer.Ordinal)
     {
         Status, Start, Stop, Pause, Resume, Capture, Live, Trend, UpdateIncident, DeleteIncident, Catalog,
         ControlProcesses, ControlServices, ProcessAction, ServiceAction, TuneUpScan, TuneUpApply, TuneUpPlan, CleanupFiles, OverlayState, OverlayReload, OverlayIdentify, OverlayArrange, OverlayScreenDrivers, OverlayScreenDriverApprove,
         StorageState, StorageClean, HardwareState, HardwareCheck, RecorderCost, DriverImport, DriverRemove,
-        WindowsDrivers, WindowsDriverImport, WindowsDriverInstall, WindowsDriverRemove, Stability, StabilityDumps, StabilityMemoryTest,
+        WindowsDrivers, WindowsDriverImport, WindowsDriverInstall, WindowsDriverRemove, Stability, StabilityDumps, StabilityMemoryTest, DriverLatency, DriverLatencyMeasure,
     };
 }
 
@@ -211,12 +217,14 @@ public sealed record AgentRequestArgs(
 /// <param name="ScreenDrivers">The USB screens' driver packages (overlay-screen-drivers).</param>
 /// <param name="Cost">The recorder's CPU over the last minute, by part (recorder-cost).</param>
 /// <param name="WindowsDrivers">Devices without a driver and Windows driver packages (windows-driver-*).</param>
+/// <param name="DriverLatency">Driver latency measurements (driver-latency, driver-latency-measure).</param>
 public sealed record AgentResponse(
     string Id, bool Ok, string? Error = null, AgentStatus? Status = null, AgentCaptureResult? Capture = null, LiveSnapshot? Live = null, LiveTrend? Trend = null,
     RecordingCatalog? Catalog = null, IReadOnlyList<ControlProcess>? Processes = null, IReadOnlyList<ControlService>? Services = null, TuneUpReport? TuneUp = null,
     ControlResult? Result = null, Overlay.OverlayState? Overlay = null, Storage.StorageState? Storage = null, Storage.StorageCleanResult? Cleaned = null,
     Devices.HardwareStatus? Hardware = null, IReadOnlyList<Overlay.ScreenDriverInfo>? ScreenDrivers = null, Diagnostics.RecorderCost? Cost = null, Devices.WindowsDriversState? WindowsDrivers = null,
-    Control.OptimizePlan? Plan = null, Control.CleanupListing? CleanupFiles = null, Stability.StabilityReport? Stability = null);
+    Control.OptimizePlan? Plan = null, Control.CleanupListing? CleanupFiles = null, Stability.StabilityReport? Stability = null,
+    Quality.DriverLatencyStatus? DriverLatency = null);
 
 /// <summary>Recorder and incident status.</summary>
 /// <param name="Version">Agent version.</param>

@@ -36,9 +36,10 @@ internal static class SystemControlEndpoints
             ActionAsync(agent, AgentCommands.ServiceAction, new AgentRequestArgs(ServiceName: name, ControlAction: action, StartType: request?.StartType, Confirmed: request?.Confirmed, Safe: request?.Safe), ct));
 
         var tuneUp = app.MapGroup("/api/v1/tuneup");
-        tuneUp.MapGet(string.Empty, async (IAgentClient agent, CancellationToken ct) =>
+        // ?fresh=1 measures the caches again ("Measure again"); otherwise a scan of the last 15 minutes is reused.
+        tuneUp.MapGet(string.Empty, async (bool? fresh, IAgentClient agent, CancellationToken ct) =>
         {
-            var response = await agent.SendAsync(AgentCommands.TuneUpScan, null, ct).ConfigureAwait(false);
+            var response = await agent.SendAsync(AgentCommands.TuneUpScan, fresh == true ? new AgentRequestArgs(Value: "fresh") : null, ct).ConfigureAwait(false);
             return Failure(response, agent) ?? Results.Ok(response!.TuneUp);
         });
 

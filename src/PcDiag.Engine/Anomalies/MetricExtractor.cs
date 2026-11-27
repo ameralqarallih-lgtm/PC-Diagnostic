@@ -96,6 +96,83 @@ internal sealed class MetricExtractor
                     network.ReceiveErrors.GetValueOrDefault(0) + network.SendErrors.GetValueOrDefault(0)));
             }
         }
+
+        ExtractQuality(frame, output);
+    }
+
+    /// <summary>How many of the latest pings the loss shares look at.</summary>
+    public const int LossWindow = 20;
+
+    private readonly Queue<bool> _internetPings = new();
+    private readonly Queue<bool> _routerPings = new();
+
+    /// <summary>The game's frame rate and stutters, the drivers' time, and the connection.</summary>
+    private void ExtractQuality(SampleFrame frame, List<MetricValue> output)
+    {
+        if (frame.Frames is { } frames)
+        {
+            if (frames.DropPercent is { } drop)
+            {
+                output.Add(new(AnomalyMetrics.GameDrop, "", frames.Game, Math.Round(drop, 1)));
+            }
+
+            output.Add(new(AnomalyMetrics.GameStutters, "", frames.Game, frames.Stutters));
+        }
+
+        if (frame.Cpu is { } cpu && (cpu.BusiestDpcCore is not null || cpu.BusiestInterruptCore is not null))
+        {
+            output.Add(new(AnomalyMetrics.DriverTime, "", null, Math.Max(cpu.BusiestDpcCore?.Percent ?? 0, cpu.BusiestInterruptCore?.Percent ?? 0)));
+        }
+
+        if (frame.DriverLatency?.Slowest is { } slowest)
+        {
+            output.Add(new(AnomalyMetrics.DriverLongest, "", slowest.Driver, slowest.LongestUs));
+        }
+
+        if (frame.Connection is { } connection)
+        {
+            if (Loss(_internetPings, connection.Internet) is { } internetLoss)
+            {
+                output.Add(new(AnomalyMetrics.ConnectionLoss, "", null, internetLoss));
+            }
+
+            if (Loss(_routerPings, connection.Router) is { } routerLoss)
+            {
+                output.Add(new(AnomalyMetrics.RouterLoss, "", null, routerLoss));
+            }
+
+            if (connection.Internet.Ms is { } internetMs)
+            {
+                output.Add(new(AnomalyMetrics.ConnectionPing, "", null, internetMs));
+            }
+
+            if (connection.Router.Ms is { } routerMs)
+            {
+                output.Add(new(AnomalyMetrics.RouterPing, "", null, routerMs));
+            }
+
+            if (connection.DnsFailed is { } failed)
+            {
+                output.Add(new(AnomalyMetrics.DnsFailed, "", null, failed ? 1 : 0));
+            }
+        }
+    }
+
+    /// <summary>The share (%) of the latest <see cref="LossWindow"/> pings that were lost, once a ping was sent (null otherwise).</summary>
+    private static double? Loss(Queue<bool> latest, PingResult ping)
+    {
+        if (!ping.Sent)
+        {
+            return null;
+        }
+
+        latest.Enqueue(ping.Lost);
+        while (latest.Count > LossWindow)
+        {
+            latest.Dequeue();
+        }
+
+        return 100.0 * latest.Count(lost => lost) / latest.Count;
     }
 
     /// <summary>

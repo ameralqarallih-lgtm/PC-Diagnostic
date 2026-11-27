@@ -27,7 +27,7 @@ public sealed class IncidentStore(DataPaths paths, SqliteConnectionFactory conne
     [
         "SystemSnapshots", "CpuMetrics", "MemoryMetrics", "GpuMetrics", "DiskMetrics", "NetworkMetrics", "VolumeMetrics",
         "ProcessSnapshots", "ProcessEvents", "ServiceEvents", "ServiceSnapshots", "SensorReadings", "ExtensionMetrics",
-        "DisplayEvents", "DisplaySnapshots",
+        "DisplayEvents", "DisplaySnapshots", "FrameMetrics", "ConnectionMetrics", "DriverLatency", "QualityMinutes",
     ];
 
     /// <summary>Small reference tables copied whole.</summary>
@@ -668,7 +668,8 @@ public sealed class IncidentStore(DataPaths paths, SqliteConnectionFactory conne
                     p.TrueIo is { } io ? io.DiskReadBytesPerSec : DBNull.Value,
                     p.TrueIo is { } io2 ? io2.DiskWriteBytesPerSec : DBNull.Value,
                     p.TrueIo is { } io3 ? io3.NetReceiveBytesPerSec : DBNull.Value,
-                    p.TrueIo is { } io4 ? io4.NetSendBytesPerSec : DBNull.Value).ConfigureAwait(false);
+                    p.TrueIo is { } io4 ? io4.NetSendBytesPerSec : DBNull.Value,
+                    p.TrueIo is { } io5 ? io5.NetRetransmitsPerSec : DBNull.Value).ConfigureAwait(false);
             }
         }
     }

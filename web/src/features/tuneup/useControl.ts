@@ -35,6 +35,15 @@ export function useTuneUpReport(enabled = true) {
   });
 }
 
+/** Measures the clean-up targets again now (a scan is otherwise kept 15 minutes) and puts the result in the report. */
+export function useTuneUpRescan() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiGet<TuneUpReport>('/tuneup?fresh=1'),
+    onSuccess: (report) => queryClient.setQueryData(['tuneup'], report),
+  });
+}
+
 /** Memory and the rest of the live picture, for the advice (every few seconds). */
 export function useLiveOnce() {
   return useQuery({

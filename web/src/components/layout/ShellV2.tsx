@@ -14,7 +14,7 @@ type To = (typeof NAV_ITEMS)[number]['to'];
 
 /** The four areas of the v2 sidebar and the pages in each (UI v2 plan, Navigation). */
 export const AREAS: readonly { name: string; pages: readonly To[] }[] = [
-  { name: 'Monitor', pages: ['/', '/incidents', '/history', '/diagnostics', '/tune-up'] },
+  { name: 'Monitor', pages: ['/', '/incidents', '/history', '/gaming', '/network', '/diagnostics', '/tune-up'] },
   { name: 'On screen', pages: ['/on-screen', '/characters', '/generator'] },
   { name: 'Devices', pages: ['/system', '/drivers'] },
   { name: 'Settings', pages: ['/settings', '/storage'] },

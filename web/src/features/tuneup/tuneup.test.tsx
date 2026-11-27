@@ -203,10 +203,16 @@ describe('Tune-up page', () => {
   });
 
   it('cleans the selected targets, the safe ones selected at first', async () => {
-    const fetchMock = mockApi({ ...common, 'POST /api/v1/tuneup/clean': () => ({ ok: true, message: '1200 files removed.', freedBytes: 1.5 * GB, changed: 1200, restartNeeded: false }) });
+    const fetchMock = mockApi({
+      ...common,
+      'GET /api/v1/tuneup': () => report({}, { cleanupAt: '2026-10-08T11:52:00Z' }),
+      'POST /api/v1/tuneup/clean': () => ({ ok: true, message: '1200 files removed.', freedBytes: 1.5 * GB, changed: 1200, restartNeeded: false }),
+    });
     renderApp('/tune-up?tab=cleanup');
 
     const list = await screen.findByRole('list', { name: 'Clean-up targets' });
+    // The sizes may come from a scan kept a while (measuring the caches is costly): when they were measured is shown.
+    expect(screen.getByText(/Sizes measured at/)).toBeInTheDocument();
     expect(within(list).getByRole('checkbox', { name: /Your temporary files/ })).toBeChecked();
     expect(within(list).getByRole('checkbox', { name: /Graphics shader caches/ })).not.toBeChecked();
     expect(within(list).getByText('Games compile their shaders again.')).toBeInTheDocument();
@@ -223,6 +229,9 @@ describe('Tune-up page', () => {
     await userEvent.click(within(await screen.findByRole('dialog', { name: 'Remove 1.5 GB?' })).getByRole('button', { name: 'Clean up' }));
     expect(await screen.findByText('1200 files removed.')).toBeInTheDocument();
     expect(bodyOf(fetchMock, 'POST', '/api/v1/tuneup/clean')).toEqual({ items: ['user-temp'], safe: true });
+
+    // After cleaning, the sizes are measured afresh (not the kept scan).
+    await waitFor(() => expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/api/v1/tuneup?fresh=1'))).toBe(true));
   });
 
   it('shows what a clean-up target holds as a tree, opened folder by folder', async () => {

@@ -5,6 +5,7 @@ using System.Runtime.Versioning;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
 using PcDiag.Core.Devices;
+using PcDiag.Platform.Windows.Devices;
 using PcDiag.Platform.Windows.Gpu;
 using PcDiag.Platform.Windows.Network;
 
@@ -18,16 +19,19 @@ namespace PcDiag.Platform.Windows.Inventory;
 [SupportedOSPlatform("windows")]
 public static partial class HardwareInventory
 {
+    /// <summary>The connected devices are read in full again at least this often, even when none came or went.</summary>
+    public static readonly TimeSpan DevicesRefresh = TimeSpan.FromMinutes(10);
+
+    private static readonly Lock DevicesLock = new();
+    private static (ulong Signature, long At, List<HardwareItem> Items)? _devices;
+
     /// <summary>What is there now (monitors excepted).</summary>
     public static List<HardwareItem> Read()
     {
         var items = new List<HardwareItem>();
         try
         {
-            foreach (var device in DeviceInventory.Read().Devices.Where(d => d.Present && !d.Technical && d.Kind is not ("system" or "display")))
-            {
-                items.Add(new HardwareItem("device:" + device.Key, "device", device.Name, Title(device.Kind)));
-            }
+            items.AddRange(Devices());
         }
         catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException or COMException or InvalidOperationException)
         {
@@ -121,6 +125,53 @@ public static partial class HardwareInventory
     /// <summary>A filter's binding to an adapter ends in a four-digit instance number.</summary>
     [GeneratedRegex(@"-\d{4}$", RegexOptions.CultureInvariant)]
     private static partial Regex FilterBinding();
+
+    /// <summary>
+    /// The connected devices (not the plumbing). Reading the whole device register costs seconds of CPU (every node
+    /// Windows has known, connected or not, with up to twenty properties each: about 8 s a read on the dev PC, which the
+    /// check every 20 s made 0.4 of a processor). So the list is kept while the connected devices and their problem
+    /// codes stay the same (one cheap call for the IDs and one status call each) and read in full when they change, and
+    /// every <see cref="DevicesRefresh"/> anyway (a driver update can rename one).
+    /// </summary>
+    private static List<HardwareItem> Devices()
+    {
+        var signature = PresentSignature(DeviceTree.PresentProblems());
+        lock (DevicesLock)
+        {
+            if (_devices is { } kept && kept.Signature == signature && System.Diagnostics.Stopwatch.GetElapsedTime(kept.At) < DevicesRefresh)
+            {
+                return kept.Items;
+            }
+        }
+
+        var items = DeviceInventory.Read().Devices
+            .Where(d => d.Present && !d.Technical && d.Kind is not ("system" or "display"))
+            .Select(d => new HardwareItem("device:" + d.Key, "device", d.Name, Title(d.Kind)))
+            .ToList();
+        lock (DevicesLock)
+        {
+            _devices = (signature, System.Diagnostics.Stopwatch.GetTimestamp(), items);
+        }
+
+        return items;
+    }
+
+    /// <summary>The connected device nodes and their problem codes as one number (any arrival, removal or new problem changes it).</summary>
+    internal static ulong PresentSignature(IReadOnlyDictionary<string, int> present)
+    {
+        var hash = 14695981039346656037UL;
+        foreach (var (id, problem) in present.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            foreach (var c in id)
+            {
+                hash = (hash ^ char.ToUpperInvariant(c)) * 1099511628211UL;
+            }
+
+            hash = (hash ^ (uint)problem ^ 0x1F) * 1099511628211UL;
+        }
+
+        return hash ^ (ulong)present.Count;
+    }
 
     private static string Title(string kind) => kind switch
     {

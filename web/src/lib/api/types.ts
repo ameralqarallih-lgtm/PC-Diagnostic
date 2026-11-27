@@ -580,6 +580,18 @@ export interface UserSettings {
     watchWhenNotRecording?: boolean;
     /** While watching, the latest minutes are kept on disk too, so a crash's incident has them (the crash black box). */
     blackBox?: boolean;
+    /** Game frame rates while a game is in front (full screen, borderless or windowed). */
+    frameRates?: boolean;
+    /** Programs always counted as games. */
+    games?: string[];
+    /** Programs never counted as games. */
+    notGames?: string[];
+    /** Pings to the router, the provider and the internet, and DNS checks. */
+    connectionChecks?: boolean;
+    /** Driver latency measured by itself when drivers hold a processor long or a game stutters. */
+    driverLatency?: boolean;
+    /** The minute-by-minute quality history, kept also while only watching. */
+    qualityHistory?: boolean;
     preIncidentMinutes: number;
     postIncidentSeconds: number;
     ringBufferMaxMegabytes: number;
@@ -978,6 +990,8 @@ export interface TuneUpReport {
   cleanup: CleanupTarget[];
   system: SystemTuning;
   startup: StartupEntry[];
+  /** When the clean-up sizes were measured (a scan is kept 15 minutes: measuring the caches is costly). */
+  cleanupAt?: string | null;
 }
 
 export interface ControlResult {
@@ -1981,5 +1995,228 @@ export interface StabilityReport {
 /** GET /api/v1/stability. */
 export interface StabilityResponse {
   report: StabilityReport | null;
+  problem: string | null;
+}
+
+/** A game session: a game in front with gaps under a minute. */
+export interface GameSession {
+  id: number;
+  game: string;
+  start: string;
+  end: string;
+  seconds: number;
+  fpsAvg: number | null;
+  /** The frame rate of its slowest 1 % of seconds. */
+  fpsP1: number | null;
+  /** The median of its 1 % lows. */
+  low1Fps: number | null;
+  stutters: number;
+  /** Seconds 40 % or more below its usual frame rate. */
+  dropSeconds: number;
+  worstMs: number | null;
+  /** Frames that reached the screen a second, on average (null without PresentMon). */
+  displayedFps?: number | null;
+  /** Frames presented and never shown. */
+  dropped?: number | null;
+  displayLatencyMs?: number | null;
+  /** The GPU's work as a share of each frame's time. */
+  gpuBusyPercent?: number | null;
+  /** The CPU's work before presenting as a share of each frame's time. */
+  cpuBusyPercent?: number | null;
+  /** How Windows showed its frames, e.g. "Hardware: Independent Flip", "Composed: Flip". */
+  presentMode?: string | null;
+  /** Share of its seconds in a window. */
+  windowedPercent?: number | null;
+  /** Why it counted as a game: "full screen", "windows", "library", "graphics", "user". */
+  recognized?: string | null;
+}
+
+export interface GameSessionsResponse {
+  sessions: GameSession[];
+  now: string;
+}
+
+export interface HopMinute {
+  ms: number | null;
+  max: number | null;
+  /** Lost pings (%); null when none was sent. */
+  loss: number | null;
+}
+
+export interface QualityMinute {
+  at: string;
+  seconds: number;
+  game: string | null;
+  gameSeconds: number;
+  fpsAvg: number | null;
+  fpsMin: number | null;
+  low1Fps: number | null;
+  stutters: number;
+  worstMs: number | null;
+  dropSeconds: number;
+  dpcCoreMax: number | null;
+  isrCoreMax: number | null;
+  dpcAvg: number | null;
+  router: HopMinute;
+  provider: HopMinute;
+  internet: HopMinute;
+  internetJitter: number | null;
+  dnsMs: number | null;
+  dnsChecks: number;
+  dnsFailed: number;
+  wifiMin: number | null;
+  netBps: number | null;
+  displayedFps?: number | null;
+  dropped?: number | null;
+  displayLatencyMs?: number | null;
+  gpuBusyPercent?: number | null;
+  cpuBusyPercent?: number | null;
+  presentMode?: string | null;
+}
+
+export interface FrameSecond {
+  at: string;
+  fps: number;
+  worstMs: number | null;
+  stutters: number;
+  usualFps: number | null;
+  displayedFps?: number | null;
+  dropped?: number | null;
+  worstDisplayedMs?: number | null;
+  gpuBusyPercent?: number | null;
+  cpuBusyPercent?: number | null;
+  presentMode?: string | null;
+}
+
+/** A finding of the quality pages; severity 0 (information) to 3 (serious). */
+export interface QualityFinding {
+  kind: string;
+  severity: number;
+  text: string;
+}
+
+export interface FrameDrop {
+  from: string;
+  to: string;
+  lowestFps: number;
+  usualFps: number | null;
+  worstMs: number | null;
+  stutters: number;
+  findings: QualityFinding[];
+}
+
+export interface GameSessionResponse {
+  session: GameSession;
+  seconds: FrameSecond[];
+  minutes: QualityMinute[];
+  drops: FrameDrop[];
+  patterns: { kind: string; drops: number }[];
+  incidents: { key: string; title: string; at: string }[];
+  /** What the whole session shows. */
+  findings?: QualityFinding[];
+}
+
+export interface ClassifyResponse {
+  games: string[];
+  notGames: string[];
+}
+
+export interface HopSummary {
+  ms: number | null;
+  p95Ms: number | null;
+  loss: number | null;
+  sent: number;
+}
+
+export interface ConnectionReport {
+  minutes: number;
+  router: HopSummary;
+  provider: HopSummary;
+  internet: HopSummary;
+  jitterMs: number | null;
+  dnsMs: number | null;
+  dnsChecks: number;
+  dnsFailed: number;
+  wifiMin: number | null;
+  outages: { from: string; to: string; loss: number }[];
+  findings: QualityFinding[];
+}
+
+export interface ConnectionMinute {
+  at: string;
+  router: HopMinute;
+  provider: HopMinute;
+  internet: HopMinute;
+  jitterMs: number | null;
+  dnsMs: number | null;
+  dnsFailed: number;
+  wifiMin: number | null;
+  netBps: number | null;
+}
+
+export interface NetworkProgram {
+  name: string;
+  receiveBps: number;
+  sendBps: number;
+  peakBps: number;
+  retransmitsPerSec: number;
+}
+
+export interface ConnectionResponse {
+  from: number;
+  to: number;
+  report: ConnectionReport;
+  minutes: ConnectionMinute[];
+  programs: NetworkProgram[];
+}
+
+export interface DriverLatency {
+  driver: string;
+  dpcs: number;
+  dpcMaxUs: number;
+  dpcTotalUs: number;
+  isrs: number;
+  isrMaxUs: number;
+  isrTotalUs: number;
+  over500Us: number;
+  over1Ms: number;
+}
+
+export interface DriverLatencySample {
+  timestamp: string;
+  from: string;
+  seconds: number;
+  reason: string;
+  drivers: DriverLatency[];
+  problem: string | null;
+}
+
+export interface DriverLatencyStatus {
+  measuring: boolean;
+  problem: string | null;
+  last: DriverLatencySample | null;
+}
+
+export interface MeasurementView {
+  at: string;
+  from: string;
+  seconds: number;
+  reason: string;
+  problem: string | null;
+  drivers: { latency: DriverLatency; what: string | null; try: string | null }[];
+}
+
+export interface LatencyResponse {
+  from: number;
+  to: number;
+  minutes: { at: string; dpcCoreMax: number | null; isrCoreMax: number | null; dpcAvg: number | null }[];
+  measurements: MeasurementView[];
+  findings: QualityFinding[];
+  status: DriverLatencyStatus | null;
+  problem: string | null;
+}
+
+export interface MeasureResponse {
+  status: DriverLatencyStatus | null;
   problem: string | null;
 }

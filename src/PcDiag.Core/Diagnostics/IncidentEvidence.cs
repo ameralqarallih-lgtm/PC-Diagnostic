@@ -23,6 +23,8 @@ namespace PcDiag.Core.Diagnostics;
 /// What a custom recording selected when the incident was captured (see <see cref="Recording.RecordingItems"/>); null
 /// when everything was recorded. Data outside it was never stored, so its absence proves nothing.
 /// </param>
+/// <param name="Processes">Programs' activity in the minute before the incident moment and around it (null when not read).</param>
+/// <param name="DriverLatency">Driver latency measurements in the window (null when not read).</param>
 public sealed record IncidentEvidence(
     IncidentKey Key,
     DateTimeOffset CenterAt,
@@ -35,7 +37,9 @@ public sealed record IncidentEvidence(
     IReadOnlyList<EvidenceEvent> Events,
     IReadOnlyList<Anomaly> Anomalies,
     IReadOnlyList<IncidentTrigger> Triggers,
-    IReadOnlySet<string>? RecordedItems = null)
+    IReadOnlySet<string>? RecordedItems = null,
+    IReadOnlyList<Quality.ProcessActivity>? Processes = null,
+    IReadOnlyList<Quality.DriverLatencyMeasurement>? DriverLatency = null)
 {
     /// <summary>Whether every one of <paramref name="items"/> was recorded (always true without a custom selection).</summary>
     public bool Recorded(params string[] items) => RecordedItems is null || items.All(RecordedItems.Contains);

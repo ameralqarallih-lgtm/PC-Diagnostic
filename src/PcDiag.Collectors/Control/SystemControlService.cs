@@ -315,14 +315,14 @@ public sealed partial class SystemControlService(ProcessDirectory directory, ISy
     }
 
     /// <inheritdoc />
-    public async Task<TuneUpReport> ScanAsync(CancellationToken cancellationToken)
+    public async Task<TuneUpReport> ScanAsync(CancellationToken cancellationToken, bool fresh = false)
     {
         var now = time.GetUtcNow();
-        var cleanup = Task.Run(() => Cleanup.Scan(now), cancellationToken);
+        var cleanup = Task.Run(() => Cleanup.Scan(now, fresh), cancellationToken);
         var system = Task.Run(Tuning, cancellationToken);
         var startup = Task.Run(() => StartupItems.List().Select(i => new StartupEntry(i.Id, i.Name, i.Command, i.Location, Company(i.Program), i.Enabled)).ToList(), cancellationToken);
         await Task.WhenAll(cleanup, system, startup).ConfigureAwait(false);
-        return new TuneUpReport(now, await cleanup.ConfigureAwait(false), await system.ConfigureAwait(false), await startup.ConfigureAwait(false));
+        return new TuneUpReport(now, await cleanup.ConfigureAwait(false), await system.ConfigureAwait(false), await startup.ConfigureAwait(false), Cleanup.LastScanAt ?? now);
     }
 
     /// <inheritdoc />
@@ -352,6 +352,7 @@ public sealed partial class SystemControlService(ProcessDirectory directory, ISy
                 }
 
                 var cleaned = await Task.Run(() => Clean(chosen), cancellationToken).ConfigureAwait(false);
+                Cleanup.Forget();
                 return skipped.Count == 0 ? cleaned : cleaned with { Skipped = skipped };
             }
 

@@ -817,6 +817,187 @@ public sealed class OverlayRendererTests
     }
 
     [Fact]
+    public void A_moving_panel_drawn_again_over_its_last_layers_is_the_same_picture_and_takes_their_background()
+    {
+        static byte[] Frame(Color color)
+        {
+            using var bitmap = new Bitmap(40, 20);
+            using (var g = Graphics.FromImage(bitmap))
+            {
+                g.Clear(color);
+            }
+
+            using var stream = new MemoryStream();
+            bitmap.Save(stream, System.Drawing.Imaging.ImageFormat.Jpeg);
+            return stream.ToArray();
+        }
+
+        using var animation = AnimatedPicture.Read(OverlayAnimation.Write(2, 40, 20, [Frame(Color.FromArgb(220, 30, 40)), Frame(Color.FromArgb(30, 40, 220))])).ShouldNotBeNull();
+        var previous = OverlayRenderer.Animations;
+        OverlayRenderer.Animations = id => id == "0123456789abcdef.anim" ? animation : null;
+        try
+        {
+            var aurora = OverlayStyles.Presets["aurora"] with { Motion = "aurora" };
+            var animated = new OverlayStyle(Background: "#101820", BackgroundOpacity: 90, Pattern: "hexagons", Sheen: true, Image: "0123456789abcdef.anim", ImageFit: "stretch");
+            foreach (var style in new[] { aurora, animated })
+            {
+                var panel = Showcase("tiles", style);
+
+                // At the size kept from a drawing before, as the panels are drawn after their first time (the box is then
+                // the same to the fraction of a pixel).
+                var (sized, _, _) = OverlayRenderer.RenderLayers(panel, Sources, 1.5, History(), Now, null, null, 0.7, keepLayers: false);
+                var size = sized.Size;
+                sized.Dispose();
+                var (first, _, kept) = OverlayRenderer.RenderLayers(panel, Sources, 1.5, History(), Now, size, null, 0.7, keepLayers: true);
+                using (first)
+                using (kept)
+                {
+                    var (fresh, _, freshLayers) = OverlayRenderer.RenderLayers(panel, Sources, 1.5, History(), Now, first.Size, null, 0.7, keepLayers: true);
+                    var (again, _, againLayers) = OverlayRenderer.RenderLayers(panel, Sources, 1.5, History(), Now, first.Size, null, 0.7, keepLayers: true, reuse: kept);
+                    using (fresh)
+                    using (freshLayers)
+                    using (again)
+                    using (againLayers)
+                    {
+                        Differences(fresh, again).ShouldBe(0, style.Motion);
+
+                        // The next moments compose the same too, and the last layers gave their background away.
+                        using var a = new Bitmap(fresh.Width, fresh.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+                        using var b = new Bitmap(fresh.Width, fresh.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+                        freshLayers!.Compose(a, 1.3);
+                        againLayers!.Compose(b, 1.3);
+                        Differences(a, b).ShouldBe(0, style.Motion);
+                        using var given = new Bitmap(fresh.Width, fresh.Height);
+                        kept!.Compose(given, 1.3);
+                        given.GetPixel(given.Width / 2, given.Height / 2).A.ShouldBe((byte)0);
+
+                        // Another background: nothing is taken (the layers still compose).
+                        var (other, _, otherLayers) = OverlayRenderer.RenderLayers(panel with { Style = style with { Background = "#402010" } }, Sources, 1.5, History(), Now, first.Size, null, 0.7, keepLayers: true, reuse: freshLayers);
+                        using (other)
+                        using (otherLayers)
+                        {
+                            using var still = new Bitmap(fresh.Width, fresh.Height);
+                            freshLayers.Compose(still, 1.3);
+                            still.GetPixel(still.Width / 2, still.Height / 2).A.ShouldBeGreaterThan((byte)0);
+                        }
+                    }
+                }
+            }
+        }
+        finally
+        {
+            OverlayRenderer.Animations = previous;
+        }
+    }
+
+    [Fact]
+    public void A_moving_panels_background_whose_picture_is_still_loading_is_not_taken_over()
+    {
+        var previous = OverlayRenderer.Images;
+        OverlayRenderer.Images = _ => null;
+        try
+        {
+            var style = new OverlayStyle(Background: "#101820", BackgroundOpacity: 90, Motion: "aurora", Image: "0123456789abcdef.png");
+            var panel = Showcase("tiles", style);
+            var (first, _, kept) = OverlayRenderer.RenderLayers(panel, Sources, 1, History(), Now, null, null, 0, keepLayers: true);
+            using (first)
+            using (kept)
+            {
+                var (again, _, againLayers) = OverlayRenderer.RenderLayers(panel, Sources, 1, History(), Now, first.Size, null, 0, keepLayers: true, reuse: kept);
+                using (again)
+                using (againLayers)
+                {
+                    // Drawn afresh (the picture may have come in since): the last layers keep theirs.
+                    using var still = new Bitmap(first.Width, first.Height);
+                    kept!.Compose(still, 0);
+                    still.GetPixel(still.Width / 2, still.Height / 2).A.ShouldBeGreaterThan((byte)0);
+                }
+            }
+        }
+        finally
+        {
+            OverlayRenderer.Images = previous;
+        }
+    }
+
+    [Fact]
+    public void An_animated_pictures_blend_is_the_same_sum_for_every_pixel_whether_done_8_at_a_time_or_one_by_one()
+    {
+        // 37 pixels a row: 4 rounds of 8 and 5 one by one.
+        const int Width = 37;
+        const int Height = 3;
+        var random = new Random(7);
+        var a = new int[Width * Height];
+        var b = new int[Width * Height];
+        for (var i = 0; i < a.Length; i++)
+        {
+            a[i] = random.Next(int.MinValue, int.MaxValue);
+            b[i] = random.Next(int.MinValue, int.MaxValue);
+        }
+
+        using var first = Filled(a);
+        using var second = Filled(b);
+        using var blended = new Bitmap(Width, Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+        foreach (var weight in new[] { 13, 64, 128, 200, 243 })
+        {
+            AnimatedPicture.Blend(first, second, weight, blended);
+            var result = Pixels(blended);
+            for (var i = 0; i < result.Length; i++)
+            {
+                uint ca = (uint)a[i], cb = (uint)b[i], keep = (uint)(256 - weight), take = (uint)weight;
+                var rb = ((((ca & 0x00FF00FFu) * keep) + ((cb & 0x00FF00FFu) * take)) >> 8) & 0x00FF00FFu;
+                var ag = ((((ca >> 8) & 0x00FF00FFu) * keep) + (((cb >> 8) & 0x00FF00FFu) * take)) & 0xFF00FF00u;
+                ((uint)result[i]).ShouldBe(rb | ag, $"pixel {i}, weight {weight}");
+            }
+        }
+
+        static Bitmap Filled(int[] pixels)
+        {
+            var bitmap = new Bitmap(Width, Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            var data = bitmap.LockBits(new Rectangle(0, 0, Width, Height), System.Drawing.Imaging.ImageLockMode.WriteOnly, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            for (var y = 0; y < Height; y++)
+            {
+                System.Runtime.InteropServices.Marshal.Copy(pixels, y * Width, data.Scan0 + (y * data.Stride), Width);
+            }
+
+            bitmap.UnlockBits(data);
+            return bitmap;
+        }
+
+        static int[] Pixels(Bitmap bitmap)
+        {
+            var pixels = new int[Width * Height];
+            var data = bitmap.LockBits(new Rectangle(0, 0, Width, Height), System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            for (var y = 0; y < Height; y++)
+            {
+                System.Runtime.InteropServices.Marshal.Copy(data.Scan0 + (y * data.Stride), pixels, y * Width, Width);
+            }
+
+            bitmap.UnlockBits(data);
+            return pixels;
+        }
+    }
+
+    /// <summary>How many pixels two pictures of the same size differ in.</summary>
+    private static int Differences(Bitmap a, Bitmap b)
+    {
+        a.Size.ShouldBe(b.Size);
+        var differs = 0;
+        for (var x = 0; x < a.Width; x++)
+        {
+            for (var y = 0; y < a.Height; y++)
+            {
+                if (a.GetPixel(x, y) != b.GetPixel(x, y))
+                {
+                    differs++;
+                }
+            }
+        }
+
+        return differs;
+    }
+
+    [Fact]
     public void Each_gauge_is_recorded_where_it_is_drawn_for_characters_to_play_on()
     {
         var panel = new OverlayPanel("p", null, 0, 0, "tiles", [new OverlayReading("cpu.usage", Visual: "ring"), new OverlayReading("cpu.temp", Visual: "speed", Max: 100), new OverlayReading("memory.usage")], new OverlayStyle(), Columns: 3, Width: 600, Height: 200);

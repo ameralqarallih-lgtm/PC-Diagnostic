@@ -395,7 +395,7 @@ internal sealed partial class OverlayHost : IDisposable
                         _deviceContent[key] = (panel, content);
                         var present = string.Concat(panel.Readings.Select(r => _lastSources.ContainsKey(r.Source) ? '1' : '0'));
                         Size? atLeast = _sizes.TryGetValue(key, out var last) && SameContent(last.Panel, panel) && last.Scale == display.Scale && last.Present == present ? last.Size : null;
-                        var (bitmap, hits, layers) = OverlayRenderer.RenderLayers(panel, _lastSources, display.Scale, _history, now, atLeast, null, MotionNow(), keepLayers: Moves(panel));
+                        var (bitmap, hits, layers) = OverlayRenderer.RenderLayers(panel, _lastSources, display.Scale, _history, now, atLeast, null, MotionNow(), keepLayers: Moves(panel), reuse: _layers.GetValueOrDefault(key));
                         KeepLayers(key, layers);
                         _sizes[key] = (panel, display.Scale, present, bitmap.Size);
                         if (_devicePictures.Remove(key, out var old))
@@ -770,7 +770,7 @@ internal sealed partial class OverlayHost : IDisposable
         var present = string.Concat(drawn.Readings.Select(r => _lastSources.ContainsKey(r.Source) ? '1' : '0'));
         Size? atLeast = _sizes.TryGetValue(key, out var last) && SameContent(last.Panel, drawn) && last.Scale == display.Scale && last.Present == present ? last.Size : null;
         // A moving background: drawn at the moment now, its layers kept for the frames until the next refresh.
-        var (bitmap, hits, layers) = OverlayRenderer.RenderLayers(drawn, _lastSources, display.Scale, _history, now, atLeast, view, MotionNow(), keepLayers: Moves(drawn));
+        var (bitmap, hits, layers) = OverlayRenderer.RenderLayers(drawn, _lastSources, display.Scale, _history, now, atLeast, view, MotionNow(), keepLayers: Moves(drawn), reuse: _layers.GetValueOrDefault(key));
         KeepLayers(key, layers);
         using (bitmap)
         {
