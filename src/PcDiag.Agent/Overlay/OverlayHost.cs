@@ -384,21 +384,34 @@ internal sealed partial class OverlayHost : IDisposable
                     var content = ContentKey(panel, display.Scale);
                     var unchanged = !composeOnly && content is not null && _deviceContent.TryGetValue(key, out var shown)
                         && ReferenceEquals(shown.Panel, panel) && shown.Content == content && (!Moves(panel) || _layers.ContainsKey(key));
+                    // A moving panel drawn again now: composed below at this moment, as the drawing would have.
+                    OverlayRenderer.MotionLayers? composing = null;
+                    var composeMoment = MotionNow() ?? 0;
                     if ((composeOnly || unchanged) && _devicePictures.TryGetValue(key, out var kept))
                     {
-                        // A motion frame, or a refresh that shows what it showed: the picture kept (a moving one at this moment).
+                        // A motion frame, or a refresh that shows what it showed: the picture kept (a moving one composed
+                        // below at this moment, as a drawing's is).
                         box = kept.Box;
-                        picture = _layers.TryGetValue(key, out var moving) ? ComposeFrame(key, moving, MotionSeconds()) : kept.Bitmap;
+                        picture = kept.Bitmap;
+                        if (_layers.TryGetValue(key, out var moving))
+                        {
+                            composing = moving;
+                            composeMoment = MotionSeconds();
+                        }
                     }
                     else
                     {
                         _deviceContent[key] = (panel, content);
                         var present = string.Concat(panel.Readings.Select(r => _lastSources.ContainsKey(r.Source) ? '1' : '0'));
                         Size? atLeast = _sizes.TryGetValue(key, out var last) && SameContent(last.Panel, panel) && last.Scale == display.Scale && last.Present == present ? last.Size : null;
-                        var (bitmap, hits, layers) = OverlayRenderer.RenderLayers(panel, _lastSources, display.Scale, _history, now, atLeast, null, MotionNow(), keepLayers: Moves(panel), reuse: _layers.GetValueOrDefault(key));
+                        // A moving panel: its last picture drawn on again, and composed below (straight onto the frame
+                        // when it covers what lies under it).
+                        var moves = Moves(panel);
+                        var (bitmap, hits, layers) = OverlayRenderer.RenderLayers(panel, _lastSources, display.Scale, _history, now, atLeast, null, MotionNow(), keepLayers: moves, reuse: _layers.GetValueOrDefault(key), compose: false, canvas: moves && _devicePictures.TryGetValue(key, out var prior) ? prior.Bitmap : null);
                         KeepLayers(key, layers);
+                        composing = layers;
                         _sizes[key] = (panel, display.Scale, present, bitmap.Size);
-                        if (_devicePictures.Remove(key, out var old))
+                        if (_devicePictures.Remove(key, out var old) && !ReferenceEquals(old.Bitmap, bitmap))
                         {
                             old.Bitmap.Dispose();
                         }
@@ -429,7 +442,17 @@ internal sealed partial class OverlayHost : IDisposable
                         DrawCharacters(g, characters with { Characters = [.. characters.Characters!.Where(c => c.Behind && c.Place != "inside")] }, area, frame.Size, moment, _lastSources, c => DeviceReacting(display.Key, panel.Id, c), screenSpots);
                     }
 
-                    DrawPanelPicture(g, picture, x, y, panel.Style.Opacity);
+                    // Opaque over its whole picture: composed straight into the frame (both 32-bit ARGB, the drawing's
+                    // settings), the same pixels as composing its picture and copying that here, one copy less.
+                    if (composing is not null && composing.Opaque && panel.Style.Opacity >= 100 && Flushed(g) && composing.ComposeInto(frame, new Point(x, y), composeMoment))
+                    {
+                    }
+                    else
+                    {
+                        composing?.ComposeDrawing(picture, composeMoment);
+                        DrawPanelPicture(g, picture, x, y, panel.Style.Opacity);
+                    }
+
                     var at = new Rectangle(x, y, picture.Width, picture.Height);
                     if (stillGraphics is not null)
                     {
@@ -455,7 +478,9 @@ internal sealed partial class OverlayHost : IDisposable
                 }
             }
 
-            if (over)
+            // Kept only when characters play over it (their timer draws them on it): a copy of the whole frame, which
+            // the next drawing on the frame then has to make (3.7 MB for a 1920 x 480 screen, each glide step).
+            if (over && _config.Characters && (boxes.Count > 0 || _config.StageFor(display) is not null))
             {
                 if (_deviceBase.Remove(display.Key, out var old))
                 {
@@ -486,7 +511,7 @@ internal sealed partial class OverlayHost : IDisposable
             stillPicture?.Dispose();
             _deviceSpots[display.Key] = screenSpots;
             DrawDeviceCharacters(frame, display, over ? boxes : [], _moving ? MotionSeconds() : _stillAt);
-            SendDeviceFrame(display.Key, frame, composeOnly);
+            SendDeviceFrame(display.Key, frame, composeOnly || (_moving && _config.PanelsFor(display).Any(p => !p.Hidden && _layers.ContainsKey((display.Key, p.Id)))));
         }
 
         if (!composeOnly)
@@ -541,10 +566,12 @@ internal sealed partial class OverlayHost : IDisposable
             return false;
         }
 
-        if (!_deviceMotionFrames.TryGetValue(display.Key, out var frame) || frame.Size != still.Picture.Size)
+        // 32-bit ARGB as a refresh's frame, its panels composed as a drawing composes them: a motion frame shows what
+        // a drawing at that moment would.
+        if (!_deviceMotionFrames.TryGetValue(display.Key, out var frame) || frame.Size != still.Picture.Size || frame.PixelFormat != System.Drawing.Imaging.PixelFormat.Format32bppArgb)
         {
             frame?.Dispose();
-            frame = new Bitmap(still.Picture.Width, still.Picture.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            frame = new Bitmap(still.Picture.Width, still.Picture.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
             _deviceMotionFrames[display.Key] = frame;
         }
 
@@ -554,15 +581,37 @@ internal sealed partial class OverlayHost : IDisposable
             g.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceCopy;
             g.DrawImageUnscaled(still.Picture, 0, 0);
             g.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceOver;
-            g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighSpeed;
-            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
             foreach (var (key, at, opacity) in still.Moving)
             {
-                DrawPanelPicture(g, ComposeFrame(key, _layers[key], seconds), at.X, at.Y, opacity);
+                var layers = _layers[key];
+
+                // Opaque over its whole picture: straight into the frame. Otherwise composed into its picture and
+                // copied, as the drawing's frames do.
+                if (layers.Opaque && opacity >= 100 && Flushed(g) && layers.ComposeInto(frame, at.Location, seconds))
+                {
+                    continue;
+                }
+
+                if (_devicePictures.TryGetValue(key, out var kept) && kept.Bitmap.Size == layers.Size)
+                {
+                    layers.ComposeDrawing(kept.Bitmap, seconds);
+                    DrawPanelPicture(g, kept.Bitmap, at.X, at.Y, opacity);
+                }
+                else
+                {
+                    DrawPanelPicture(g, ComposeFrame(key, layers, seconds), at.X, at.Y, opacity);
+                }
             }
         }
 
         SendDeviceFrame(display.Key, frame, true);
+        return true;
+    }
+
+    /// <summary>Whatever was drawn on a frame so far, in its pixels (before they are reached directly). Always true.</summary>
+    private static bool Flushed(Graphics g)
+    {
+        g.Flush(System.Drawing.Drawing2D.FlushIntention.Sync);
         return true;
     }
 
@@ -588,7 +637,6 @@ internal sealed partial class OverlayHost : IDisposable
             return;
         }
 
-        using var g = Graphics.FromImage(frame);
         if (!_deviceCompanies.TryGetValue(display.Key, out var company))
         {
             company = new CharacterCompany();
@@ -597,6 +645,12 @@ internal sealed partial class OverlayHost : IDisposable
 
         var stage = _config.StageFor(display);
         company.Keep(boxes.Select(b => b.Panel).Concat(stage is null ? [] : [stage]).SelectMany(p => (p.Characters ?? []).Select(c => p.Id + "/" + c.Id)).ToHashSet(StringComparer.Ordinal));
+        if (boxes.Count == 0 && stage is null)
+        {
+            return;
+        }
+
+        using var g = Graphics.FromImage(frame);
         foreach (var (panel, area) in boxes)
         {
             DrawCharacters(g, panel, area, frame.Size, moment, _lastSources, c => DeviceReacting(display.Key, panel.Id, c), _deviceSpots.GetValueOrDefault(display.Key), company);

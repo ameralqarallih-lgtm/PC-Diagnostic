@@ -171,7 +171,12 @@ internal static partial class OverlayRenderer
     /// refresh or a gliding value draws only the readings (the same pixels: the background was made from the same kept
     /// copy). They can no longer be composed after; the caller disposes them as before.
     /// </param>
-    internal static (Bitmap Bitmap, PanelHits Hits, MotionLayers? Layers) RenderLayers(OverlayPanel panel, IReadOnlyDictionary<string, OverlaySource> sources, double scale, OverlayHistory? history, DateTime? now, Size? atLeast, ArrangeView? arrange, double? motionSeconds, bool keepLayers, MotionLayers? reuse = null)
+    /// <param name="compose">
+    /// False when the caller composes the layers it is given back itself (straight onto a USB screen's frame): the
+    /// picture is then not composed (<see cref="MotionLayers.ComposeDrawing"/> composes it as this would have).
+    /// </param>
+    /// <param name="canvas">A picture to draw on again when it has the size and format (the panel's last one), not a new one.</param>
+    internal static (Bitmap Bitmap, PanelHits Hits, MotionLayers? Layers) RenderLayers(OverlayPanel panel, IReadOnlyDictionary<string, OverlaySource> sources, double scale, OverlayHistory? history, DateTime? now, Size? atLeast, ArrangeView? arrange, double? motionSeconds, bool keepLayers, MotionLayers? reuse = null, bool compose = true, Bitmap? canvas = null)
     {
         ArgumentNullException.ThrowIfNull(panel);
         ArgumentNullException.ThrowIfNull(sources);
@@ -216,10 +221,12 @@ internal static partial class OverlayRenderer
 
             // Whole pixels, rounded up but not for float noise: the size kept from the last drawing comes back as that
             // size less the margins, and adding them again can land a hair above it (which grew the panel a pixel a draw).
-            var bitmap = new Bitmap(
+            var size = new Size(
                 Math.Max(1, WholePixels(panelWidth + (2 * m.Margin))),
-                Math.Max(1, WholePixels(panelHeight + (2 * m.Margin) + m.ShadowOffset)),
-                System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                Math.Max(1, WholePixels(panelHeight + (2 * m.Margin) + m.ShadowOffset)));
+            var bitmap = canvas is { PixelFormat: System.Drawing.Imaging.PixelFormat.Format32bppArgb } && canvas.Size == size
+                ? canvas
+                : new Bitmap(size.Width, size.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
             using var g = Graphics.FromImage(bitmap);
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.TextRenderingHint = TextRenderingHint.AntiAlias;
@@ -350,9 +357,12 @@ internal static partial class OverlayRenderer
             // The background, the motion at this moment, then the rest.
             front.Dispose();
             // Its background can be taken over by the next drawing only when it was whole (no picture still loading).
-            var layers = new MotionLayers(back!, frontBitmap!, box, style.CornerRadius * m.S, style, m.S, animation, m, whole ? backKey : null, taken?.Above);
-            g.ResetClip();
-            layers.Compose(g, motionSeconds ?? 0);
+            var layers = new MotionLayers(back!, frontBitmap!, box, style.CornerRadius * m.S, style, m.S, animation, m, whole ? backKey : null, taken?.Above, taken?.Opaque);
+            if (compose || !keepLayers)
+            {
+                g.ResetClip();
+                layers.Compose(g, motionSeconds ?? 0);
+            }
             if (keepLayers)
             {
                 return (bitmap, hits, layers);
@@ -375,10 +385,11 @@ internal static partial class OverlayRenderer
     /// (title, readings, border), each drawn once per refresh; <c>Compose</c> draws a moment of the motion between
     /// them. The moment is the time in seconds (the same clock everywhere, so panels and the editor move together).
     /// </summary>
-    internal sealed class MotionLayers(Bitmap back, Bitmap front, RectangleF box, float radius, OverlayStyle style, float s, AnimatedPicture? animation = null, Metrics? metrics = null, BackgroundKey? backKey = null, Bitmap? above = null) : IDisposable
+    internal sealed class MotionLayers(Bitmap back, Bitmap front, RectangleF box, float radius, OverlayStyle style, float s, AnimatedPicture? animation = null, Metrics? metrics = null, BackgroundKey? backKey = null, Bitmap? above = null, bool? opaque = null) : IDisposable
     {
         private Bitmap? _back = back;
         private Bitmap? _front = front;
+        private bool? _opaque = opaque;
 
         // What lies over an animated picture (pattern, sheen, accent edge): it never moves, so it is drawn once and laid
         // over each frame. Drawn again every frame, a hexagon pattern alone cost 10 ms of a 1920 x 480 frame's 16.
@@ -387,17 +398,25 @@ internal static partial class OverlayRenderer
         public Size Size { get; } = back.Size;
 
         /// <summary>
+        /// Whether its background covers every pixel of its picture (no shadow, margin or rounded corner letting
+        /// through what lies under it): then every pixel it composes is opaque, and composing it straight onto a
+        /// picture is the same as composing it apart and drawing that over. Looked at once (and taken over with the
+        /// background).
+        /// </summary>
+        public bool Opaque => _back is { } kept && (_opaque ??= IsOpaque(kept));
+
+        /// <summary>
         /// Gives its bitmaps to the next drawing of the panel when its background is the same as that drawing's (then
         /// it composes nothing more); null otherwise.
         /// </summary>
-        internal (Bitmap Back, Bitmap Front, Bitmap? Above)? Take(BackgroundKey key)
+        internal (Bitmap Back, Bitmap Front, Bitmap? Above, bool? Opaque)? Take(BackgroundKey key)
         {
             if (backKey is not { } kept || !kept.Equals(key) || _back is null || _front is null)
             {
                 return null;
             }
 
-            var taken = (_back, _front, _above);
+            var taken = (_back, _front, _above, _opaque);
             _back = null;
             _front = null;
             _above = null;
@@ -435,13 +454,105 @@ internal static partial class OverlayRenderer
             g.DrawImageUnscaled(front, 0, 0);
         }
 
+        /// <summary>
+        /// Composes the panel at a moment straight into <paramref name="frame"/> with its top-left corner at
+        /// <paramref name="at"/>, as <see cref="RenderLayers"/> composes it: a picture of the panel's size over the
+        /// frame's own pixels there. When <see cref="Opaque"/> and the frame is 32-bit ARGB like the drawing's picture,
+        /// that is the same as composing the picture and copying it there (one copy of the panel less). False (nothing
+        /// drawn) when the panel is not wholly inside the frame or the frame has another format; draws made on the frame
+        /// before must be flushed.
+        /// </summary>
+        internal bool ComposeInto(Bitmap frame, Point at, double seconds)
+        {
+            ArgumentNullException.ThrowIfNull(frame);
+            var place = new Rectangle(at, Size);
+            var format = frame.PixelFormat;
+            if (_back is null || !new Rectangle(Point.Empty, frame.Size).Contains(place) || format != System.Drawing.Imaging.PixelFormat.Format32bppArgb)
+            {
+                return false;
+            }
+
+            var data = frame.LockBits(place, System.Drawing.Imaging.ImageLockMode.ReadWrite, format);
+            try
+            {
+                using var view = new Bitmap(place.Width, place.Height, data.Stride, format, data.Scan0);
+                // The layers' resolution: their pictures are drawn at their own size (DrawImageUnscaled follows it).
+                view.SetResolution(_back.HorizontalResolution, _back.VerticalResolution);
+                using var g = Graphics.FromImage(view);
+                Prepare(g);
+                Compose(g, seconds);
+            }
+            finally
+            {
+                frame.UnlockBits(data);
+            }
+
+            return true;
+        }
+
+        /// <summary>Composes the panel at a moment into its picture as <see cref="RenderLayers"/> does (left to the caller).</summary>
+        internal void ComposeDrawing(Bitmap target, double seconds)
+        {
+            ArgumentNullException.ThrowIfNull(target);
+            using var g = Graphics.FromImage(target);
+            Prepare(g);
+            Compose(g, seconds);
+        }
+
+        // The drawing's settings (RenderLayers), which its composing used.
+        private static void Prepare(Graphics g)
+        {
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = TextRenderingHint.AntiAlias;
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            g.CompositingQuality = CompositingQuality.AssumeLinear;
+        }
+
+        private static unsafe bool IsOpaque(Bitmap bitmap)
+        {
+            var rect = new Rectangle(0, 0, bitmap.Width, bitmap.Height);
+            var data = bitmap.LockBits(rect, System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            try
+            {
+                var mask = System.Runtime.Intrinsics.Vector256.Create(0xFF000000u);
+                for (var y = 0; y < rect.Height; y++)
+                {
+                    var row = (uint*)((byte*)data.Scan0 + ((long)y * data.Stride));
+                    var x = 0;
+                    for (; x <= rect.Width - 8; x += 8)
+                    {
+                        if (!System.Runtime.Intrinsics.Vector256.EqualsAll(System.Runtime.Intrinsics.Vector256.Load(row + x) & mask, mask))
+                        {
+                            return false;
+                        }
+                    }
+
+                    for (; x < rect.Width; x++)
+                    {
+                        if ((row[x] & 0xFF000000u) != 0xFF000000u)
+                        {
+                            return false;
+                        }
+                    }
+                }
+
+                return true;
+            }
+            finally
+            {
+                bitmap.UnlockBits(data);
+            }
+        }
+
         /// <summary>Draws the panel at a moment into a picture of its size.</summary>
         public void Compose(Bitmap target, double seconds)
         {
             ArgumentNullException.ThrowIfNull(target);
             using var g = Graphics.FromImage(target);
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.CompositingQuality = CompositingQuality.AssumeLinear;
+            // The drawing's settings: a motion frame is composed as the drawing's frames are. Without the half-pixel
+            // offset its background's top row and left column came out part-transparent, so a panel's edge differed
+            // between the frames of its motion and the others (until 1.0.13).
+            Prepare(g);
             Compose(g, seconds);
         }
 
@@ -2379,6 +2490,62 @@ internal static partial class OverlayRenderer
     /// <param name="fit">A text longer than its room is shortened with "…" to fit it (an app's name in its space).</param>
     /// <param name="tracking">Space after each letter, against <paramref name="px"/> (as CSS letter-spacing, the last letter's too).</param>
     private static Shape Text(string text, FontFamily family, FontStyle style, float px, bool even = false, IReadOnlyList<string>? reserve = null, bool fit = false, float tracking = 0)
+    {
+        // The same texts are made each time a panel is drawn (labels, units, a value that has not changed; a gliding
+        // value 20 times a second): the outline made once is kept, and a copy of it given out (the caller owns and
+        // disposes it; drawing never changes it). Making it again gives the same outline.
+        var key = new ShapeKey(text, family.Name, style, px, even, reserve is { Count: > 0 } ? string.Join('\u0001', reserve) : null, fit, tracking);
+        lock (ShapesLock)
+        {
+            if (Shapes.TryGetValue(key, out var kept))
+            {
+                return kept with { Path = (GraphicsPath)kept.Path.Clone() };
+            }
+        }
+
+        var made = MakeText(text, family, style, px, even, reserve, fit, tracking);
+        lock (ShapesLock)
+        {
+            if (Shapes.Count >= 2048)
+            {
+                foreach (var old in Shapes.Values)
+                {
+                    old.Dispose();
+                }
+
+                Shapes.Clear();
+            }
+
+            if (!Shapes.ContainsKey(key))
+            {
+                Shapes[key] = made with { Path = (GraphicsPath)made.Path.Clone() };
+            }
+        }
+
+        return made;
+    }
+
+    /// <summary>What a text's outline is made from.</summary>
+    private readonly record struct ShapeKey(string Text, string Family, FontStyle Style, float Px, bool Even, string? Reserve, bool Fit, float Tracking);
+
+    private static readonly Lock ShapesLock = new();
+    private static readonly Dictionary<ShapeKey, Shape> Shapes = [];
+
+    /// <summary>Forgets the kept text outlines (they are then made again).</summary>
+    internal static void ForgetTexts()
+    {
+        lock (ShapesLock)
+        {
+            foreach (var shape in Shapes.Values)
+            {
+                shape.Dispose();
+            }
+
+            Shapes.Clear();
+        }
+    }
+
+    private static Shape MakeText(string text, FontFamily family, FontStyle style, float px, bool even, IReadOnlyList<string>? reserve, bool fit, float tracking)
     {
         var fontStyle = family.IsStyleAvailable(style) ? style : FontStyle.Regular;
         var path = new GraphicsPath();

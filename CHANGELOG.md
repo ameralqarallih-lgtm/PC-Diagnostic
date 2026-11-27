@@ -3,6 +3,24 @@
 All notable changes to PC Diagnostic & Incident Recorder. Each release's installer is on the
 [releases page](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/releases).
 
+## [1.0.13] - 2026-11-27
+
+### Changed
+- **The recorder uses about a quarter less CPU again**, with every picture it shows the same. On one PC, with a USB
+  screen showing an animated 1920 × 480 panel at 20 pictures a second and the dashboard open, it went from 28.6–30.6 s
+  of CPU a minute in 1.0.12 to about 21–24 s (56–70 s in 1.0.11):
+  - a USB screen's pictures are no longer copied for characters that are not there, or compared pixel by pixel while
+    they move; they are turned onto the panel 8 × 8 pixels at a time into the picture the last encoding gave back
+    (0.3 ms against 2.2 ms), and encoded into a buffer the screen keeps. [#32](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/32)
+  - a moving panel that covers what lies under it is composed straight into the screen's picture, is drawn on its last
+    picture again, keeps its text outlines, and has its animated background's frames copied from the JPEG into the frame
+    no longer shown. [#33](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/33)
+
+### Fixed
+- **A moving panel's top and left edges no longer change between frames**: the frames of its motion are composed as
+  its other frames are (on the USB screens and the monitors), and cost less (6.4–6.7 ms against 7.5–8.0 ms for an
+  animated 1920 × 480 panel). [#34](https://github.com/ameralqarallih-lgtm/PC-Diagnostic/issues/34)
+
 ## [1.0.12] - 2026-11-27
 
 ### Added

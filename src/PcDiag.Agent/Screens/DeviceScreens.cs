@@ -143,13 +143,23 @@ internal sealed partial class DeviceScreens : IAsyncDisposable
         }
 
         var rotation = ScreenFrames.RotationOf(device.Model, _config.DeviceOf(key).Rotation);
-        var copy = (Bitmap)layout.Clone();
+        // Turned here when it can be done quickly (it is then also the copy to encode), otherwise copied and turned
+        // with the encoding.
+        // Into the picture the last encoding gave back, when it fits.
+        var spare = _spare.TryRemove(key, out var given) ? given : null;
+        var turned = ScreenFrames.Turned(layout, rotation, spare);
+        if (spare is not null && !ReferenceEquals(spare, turned))
+        {
+            spare.Dispose();
+        }
+
+        var copy = turned ?? (Bitmap)layout.Clone();
+        var turnBy = turned is null ? rotation : 0;
         var quality = _quality.GetOrAdd(key, _ => new ScreenFrames.JpegQuality());
         _ = Task.Run(() =>
         {
             try
             {
-                using (copy)
                 using (CostMeter.Measure("usb.encode"))
                 {
                     // A picture as the last one sent is not encoded again (the panels refresh every second, often unchanged).
@@ -164,7 +174,7 @@ internal sealed partial class DeviceScreens : IAsyncDisposable
                         _lastLayout[key] = pixels;
                     }
 
-                    if (ScreenFrames.MakeFrom(copy, device.Model, rotation, quality) is not { } frame)
+                    if (ScreenFrames.MakeFrom(copy, device.Model, turnBy, quality) is not { } frame)
                     {
                         return;
                     }
@@ -190,12 +200,21 @@ internal sealed partial class DeviceScreens : IAsyncDisposable
             }
             finally
             {
+                // Given back for the next picture to be turned into (one is encoded at a time per screen).
+                if (!_spare.TryAdd(key, copy))
+                {
+                    copy.Dispose();
+                }
+
                 _making.TryRemove(key, out _);
             }
         });
     }
 
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ScreenFrames.JpegQuality> _quality = new(StringComparer.Ordinal);
+
+    /// <summary>Each screen's last encoded picture, given back to be turned into again (a 1920 x 480 one took 0.9 ms to make).</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Bitmap> _spare = new(StringComparer.Ordinal);
     private readonly Dictionary<string, ulong> _lastLayout = new(StringComparer.Ordinal);
 
     /// <summary>A picture's pixels as one number (64-bit FNV-1a over its rows, 8 bytes at a time).</summary>

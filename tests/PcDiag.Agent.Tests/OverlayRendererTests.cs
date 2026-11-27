@@ -978,6 +978,222 @@ public sealed class OverlayRendererTests
         }
     }
 
+    [Fact]
+    public void An_animated_pictures_frame_copied_from_its_JPEG_has_the_same_pixels_as_drawing_it()
+    {
+        // Widths that are and are not a multiple of 4 (the copy does 4 pixels at a time, the last ones one by one).
+        var random = new Random(5);
+        foreach (var (width, height) in new[] { (1920, 48), (37, 11), (5, 3) })
+        {
+            using var noise = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+            for (var x = 0; x < width; x++)
+            {
+                for (var y = 0; y < height; y++)
+                {
+                    noise.SetPixel(x, y, Color.FromArgb(random.Next(256), random.Next(256), random.Next(256)));
+                }
+            }
+
+            using var stream = new MemoryStream();
+            noise.Save(stream, System.Drawing.Imaging.ImageFormat.Jpeg);
+            stream.Position = 0;
+            using var decoded = (Bitmap)Image.FromStream(stream);
+            decoded.PixelFormat.ShouldBe(System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+            using var drawn = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            using (var g = Graphics.FromImage(drawn))
+            {
+                g.DrawImage(decoded, new Rectangle(0, 0, width, height));
+            }
+
+            using var copied = new Bitmap(width, height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            AnimatedPicture.Opaque(decoded, copied);
+            Differences(drawn, copied).ShouldBe(0, $"{width}x{height}");
+        }
+    }
+
+    [Fact]
+    public void An_opaque_moving_panel_composed_straight_onto_a_frame_has_the_same_pixels_as_composed_apart_and_copied()
+    {
+        static byte[] Frame(Color color)
+        {
+            using var bitmap = new Bitmap(40, 20);
+            using (var g = Graphics.FromImage(bitmap))
+            {
+                g.Clear(color);
+                g.FillEllipse(Brushes.Gold, 5, 3, 22, 12);
+            }
+
+            using var stream = new MemoryStream();
+            bitmap.Save(stream, System.Drawing.Imaging.ImageFormat.Jpeg);
+            return stream.ToArray();
+        }
+
+        using var animation = AnimatedPicture.Read(OverlayAnimation.Write(2, 40, 20, [Frame(Color.FromArgb(220, 30, 40)), Frame(Color.FromArgb(30, 40, 220))])).ShouldNotBeNull();
+        var previous = OverlayRenderer.Animations;
+        OverlayRenderer.Animations = id => id == "0123456789abcdef.anim" ? animation : null;
+        try
+        {
+            var animated = new OverlayStyle(Background: "#101820", BackgroundOpacity: 100, CornerRadius: 0, Shadow: 0, Pattern: "hexagons", Sheen: true, Image: "0123456789abcdef.anim", ImageFit: "stretch");
+            var aurora = OverlayStyles.Presets["aurora"] with { Motion = "aurora", BackgroundOpacity = 100, CornerRadius = 0, Shadow = 0, Border = null, Glow = 0 };
+            foreach (var style in new[] { animated, aurora })
+            {
+                var panel = Showcase("tiles", style);
+                var (sized, _, _) = OverlayRenderer.RenderLayers(panel, Sources, 1.5, History(), Now, null, null, 0.7, keepLayers: false);
+                var size = sized.Size;
+                sized.Dispose();
+
+                // As before: composed by the drawing, then copied onto the screen's frame.
+                var (composed, _, kept) = OverlayRenderer.RenderLayers(panel, Sources, 1.5, History(), Now, size, null, 0.7, keepLayers: true);
+                // Now: left uncomposed, composed by the caller.
+                var (bare, _, layers) = OverlayRenderer.RenderLayers(panel, Sources, 1.5, History(), Now, size, null, 0.7, keepLayers: true, compose: false);
+                using (composed)
+                using (kept)
+                using (bare)
+                using (layers)
+                {
+                    layers.ShouldNotBeNull().Opaque.ShouldBeTrue(style.Motion);
+                    var place = new Point(13, 7);
+                    using var before = new Bitmap(size.Width + 40, size.Height + 20, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                    using (var g = Graphics.FromImage(before))
+                    {
+                        g.Clear(Color.Teal);
+                        g.DrawImage(composed, place.X, place.Y, composed.Width, composed.Height);
+                    }
+
+                    using var after = new Bitmap(before.Width, before.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                    // With the frame's graphics still open, as the USB screens' drawing has it (flushed first).
+                    using (var g = Graphics.FromImage(after))
+                    {
+                        g.Clear(Color.Teal);
+                        g.Flush(System.Drawing.Drawing2D.FlushIntention.Sync);
+                        layers.ComposeInto(after, place, 0.7).ShouldBeTrue();
+                        g.FillRectangle(Brushes.Transparent, 0, 0, 1, 1);
+                    }
+
+                    Differences(before, after).ShouldBe(0, $"{style.Motion} straight onto the frame");
+
+                    // Composed into its own picture by the caller: the drawing's picture.
+                    layers.ComposeDrawing(bare, 0.7);
+                    Differences(composed, bare).ShouldBe(0, $"{style.Motion} composed by the caller");
+
+                    // Not wholly inside the frame: left to the usual way.
+                    layers.ComposeInto(after, new Point(after.Width - 10, 0), 1.3).ShouldBeFalse();
+                    using var premultiplied = new Bitmap(after.Width, after.Height, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+                    layers.ComposeInto(premultiplied, place, 1.3).ShouldBeFalse();
+                }
+
+                // Drawn on a picture given (the last one): the same picture, in the same bitmap.
+                using var canvas = new Bitmap(size.Width, size.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                var (again, _, againLayers) = OverlayRenderer.RenderLayers(panel, Sources, 1.5, History(), Now, size, null, 0.7, keepLayers: true, canvas: canvas);
+                using (againLayers)
+                {
+                    again.ShouldBeSameAs(canvas);
+                    var (fresh, _, freshLayers) = OverlayRenderer.RenderLayers(panel, Sources, 1.5, History(), Now, size, null, 0.7, keepLayers: true);
+                    using (fresh)
+                    using (freshLayers)
+                    {
+                        Differences(fresh, again).ShouldBe(0, $"{style.Motion} on a picture given");
+                    }
+                }
+            }
+
+            // A shadow or rounded corners let what lies under the panel through: not composed straight onto a frame.
+            var (round, _, roundLayers) = OverlayRenderer.RenderLayers(Showcase("tiles", animated with { CornerRadius = 12, Shadow = 40 }), Sources, 1.5, History(), Now, null, null, 0, keepLayers: true);
+            using (round)
+            using (roundLayers)
+            {
+                roundLayers.ShouldNotBeNull().Opaque.ShouldBeFalse();
+            }
+        }
+        finally
+        {
+            OverlayRenderer.Animations = previous;
+        }
+    }
+
+    [Fact]
+    public void A_moving_panels_motion_frame_shows_what_its_drawing_at_that_moment_would()
+    {
+        var opaque = OverlayStyles.Presets["aurora"] with { Motion = "aurora", BackgroundOpacity = 100, CornerRadius = 0, Shadow = 0, Border = null, Glow = 0 };
+        var rounded = OverlayStyles.Presets["aurora"] with { Motion = "aurora" };
+        foreach (var style in new[] { opaque, rounded })
+        {
+            var panel = Showcase("tiles", style);
+            var (sized, _, _) = OverlayRenderer.RenderLayers(panel, Sources, 1.5, History(), Now, null, null, 0, keepLayers: false);
+            var size = sized.Size;
+            sized.Dispose();
+
+            // The drawing at 1.3 s, and a motion frame of the layers drawn at 0 composed at 1.3 s.
+            var (drawn, _, drawnLayers) = OverlayRenderer.RenderLayers(panel, Sources, 1.5, History(), Now, size, null, 1.3, keepLayers: true);
+            var (_, _, layers) = OverlayRenderer.RenderLayers(panel, Sources, 1.5, History(), Now, size, null, 0, keepLayers: true);
+            using (drawn)
+            using (drawnLayers)
+            using (layers)
+            using (var motion = new Bitmap(size.Width, size.Height, System.Drawing.Imaging.PixelFormat.Format32bppArgb))
+            {
+                layers!.Compose(motion, 1.3);
+                Differences(drawn, motion).ShouldBe(0, style.CornerRadius.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                if (style == opaque)
+                {
+                    // Its edge is the panel's, not part-transparent (as motion frames' were until 1.0.13).
+                    motion.GetPixel(0, 0).A.ShouldBe((byte)255);
+                    motion.GetPixel(0, size.Height / 2).A.ShouldBe((byte)255);
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void A_large_animated_picture_decodes_each_frame_into_one_no_longer_kept_and_shows_the_right_one()
+    {
+        // 4 frames of 4096 x 1024: 64 MB decoded, over the budget, so only the two on show are kept.
+        static byte[] Frame(Color color)
+        {
+            using var bitmap = new Bitmap(4096, 1024);
+            using (var g = Graphics.FromImage(bitmap))
+            {
+                g.Clear(color);
+            }
+
+            using var stream = new MemoryStream();
+            bitmap.Save(stream, System.Drawing.Imaging.ImageFormat.Jpeg);
+            return stream.ToArray();
+        }
+
+        Color[] colors = [Color.FromArgb(220, 30, 40), Color.FromArgb(30, 200, 60), Color.FromArgb(30, 40, 220), Color.FromArgb(240, 240, 240)];
+        using var animation = AnimatedPicture.Read(OverlayAnimation.Write(2, 4096, 1024, [.. colors.Select(Frame)])).ShouldNotBeNull();
+
+        // Forward through the loop and round again (frames decoded into pictures of earlier ones), each shown alone.
+        for (var step = 0; step < 10; step++)
+        {
+            var expected = colors[step % colors.Length];
+            var shown = (Bitmap)animation.FrameAt(step * 0.5).ShouldNotBeNull();
+            var pixel = shown.GetPixel(2048, 512);
+            Math.Abs(pixel.R - expected.R).ShouldBeLessThan(12, $"step {step}");
+            Math.Abs(pixel.G - expected.G).ShouldBeLessThan(12, $"step {step}");
+            Math.Abs(pixel.B - expected.B).ShouldBeLessThan(12, $"step {step}");
+        }
+
+        // Halfway between two frames: their blend.
+        var half = (Bitmap)animation.FrameAt(5.25).ShouldNotBeNull();
+        var mixed = half.GetPixel(2048, 512);
+        Math.Abs(mixed.R - ((colors[2].R + colors[3].R) / 2)).ShouldBeLessThan(12);
+        Math.Abs(mixed.G - ((colors[2].G + colors[3].G) / 2)).ShouldBeLessThan(12);
+    }
+
+    [Fact]
+    public void A_panel_drawn_with_its_texts_kept_is_the_same_picture_as_with_them_made_again()
+    {
+        foreach (var (layout, style) in new[] { ("tiles", OverlayStyles.Presets["aurora"]), ("rows", new OverlayStyle(Caps: true, Outline: true, Glow: 40)), ("line", new OverlayStyle()) })
+        {
+            var panel = Showcase(layout, style);
+            OverlayRenderer.ForgetTexts();
+            using var made = OverlayRenderer.Render(panel, Sources, 1.5, History(), Now);
+            using var kept = OverlayRenderer.Render(panel, Sources, 1.5, History(), Now);
+            Differences(made, kept).ShouldBe(0, layout);
+        }
+    }
+
     /// <summary>How many pixels two pictures of the same size differ in.</summary>
     private static int Differences(Bitmap a, Bitmap b)
     {

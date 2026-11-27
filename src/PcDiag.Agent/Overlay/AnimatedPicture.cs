@@ -92,7 +92,7 @@ internal sealed class AnimatedPicture : IDisposable
     {
         if (_keepAll)
         {
-            return _decoded[index] ??= Decode(index);
+            return _decoded[index] ??= Decode(index, null);
         }
 
         foreach (var (at, kept) in _recent)
@@ -103,14 +103,22 @@ internal sealed class AnimatedPicture : IDisposable
             }
         }
 
-        var frame = Decode(index);
-        _recent.Add((index, frame));
-        if (_recent.Count > 2)
+        // The oldest of the two kept is decoded into (not a new 3.7 MB picture each frame of a 1920 x 480 loop): never
+        // the frame asked for just before (a frame and the next are shown together), which is the newest.
+        Bitmap? spare = null;
+        if (_recent.Count >= 2)
         {
-            _recent[0].Frame?.Dispose();
+            spare = _recent[0].Frame;
             _recent.RemoveAt(0);
         }
 
+        var frame = Decode(index, spare);
+        if (spare is not null && !ReferenceEquals(spare, frame))
+        {
+            spare.Dispose();
+        }
+
+        _recent.Add((index, frame));
         return frame;
     }
 
@@ -193,7 +201,50 @@ internal sealed class AnimatedPicture : IDisposable
         return x;
     }
 
-    private Bitmap? Decode(int index)
+    /// <summary>
+    /// A 24-bit picture's pixels into a 32-bit premultiplied one of its size, opaque (blue, green, red, then 255):
+    /// 4 pixels at a time where the processor can.
+    /// </summary>
+    internal static unsafe void Opaque(Bitmap source, Bitmap to)
+    {
+        var rect = new Rectangle(0, 0, source.Width, source.Height);
+        var from = source.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format24bppRgb);
+        var into = to.LockBits(rect, ImageLockMode.WriteOnly, PixelFormat.Format32bppPArgb);
+        try
+        {
+            var spread = Vector128.Create((byte)0, 1, 2, 255, 3, 4, 5, 255, 6, 7, 8, 255, 9, 10, 11, 255);
+            var alpha = Vector128.Create(0xFF000000u);
+            for (var y = 0; y < rect.Height; y++)
+            {
+                var row = (byte*)from.Scan0 + ((long)y * from.Stride);
+                var target = (uint*)((byte*)into.Scan0 + ((long)y * into.Stride));
+                var x = 0;
+                if (Vector128.IsHardwareAccelerated)
+                {
+                    // 16 bytes read for 12 used: the last 4 pixels of a row are done one by one.
+                    for (; x <= rect.Width - 6; x += 4)
+                    {
+                        var pixels = Vector128.Shuffle(Vector128.Load(row + (x * 3)), spread).AsUInt32() | alpha;
+                        pixels.Store(target + x);
+                    }
+                }
+
+                for (; x < rect.Width; x++)
+                {
+                    var p = row + (x * 3);
+                    target[x] = 0xFF000000u | ((uint)p[2] << 16) | ((uint)p[1] << 8) | p[0];
+                }
+            }
+        }
+        finally
+        {
+            source.UnlockBits(from);
+            to.UnlockBits(into);
+        }
+    }
+
+    /// <summary>A frame decoded into <paramref name="into"/> when it has the size (a frame no longer kept), else a new picture.</summary>
+    private Bitmap? Decode(int index, Bitmap? into)
     {
         var (offset, length) = _animation.Frames[index];
         try
@@ -201,9 +252,24 @@ internal sealed class AnimatedPicture : IDisposable
             using var stream = new MemoryStream(_bytes, offset, length, writable: false);
             using var image = Image.FromStream(stream);
             // Premultiplied, as the layers are: drawn and blended without converting each time.
-            var frame = new Bitmap(image.Width, image.Height, PixelFormat.Format32bppPArgb);
+            var reused = into is not null && into.Width == image.Width && into.Height == image.Height && into.PixelFormat == PixelFormat.Format32bppPArgb;
+            var frame = reused ? into! : new Bitmap(image.Width, image.Height, PixelFormat.Format32bppPArgb);
+            if (image is Bitmap { PixelFormat: PixelFormat.Format24bppRgb } opaque)
+            {
+                // A JPEG's pixels are opaque: copied (every one of them), they are what drawing it gives (without its
+                // 1 ms a frame).
+                Opaque(opaque, frame);
+                return frame;
+            }
+
             using (var g = Graphics.FromImage(frame))
             {
+                if (reused)
+                {
+                    // Drawn over a frame no longer kept: cleared first, as a new picture is.
+                    g.Clear(Color.Transparent);
+                }
+
                 g.DrawImage(image, new Rectangle(0, 0, image.Width, image.Height));
             }
 

@@ -43,6 +43,81 @@ public sealed class DeviceScreenTests
     }
 
     [Fact]
+    public void A_frame_turned_8_by_8_has_the_same_pixels_as_RotateFlip_gives()
+    {
+        if (!System.Runtime.Intrinsics.X86.Avx2.IsSupported)
+        {
+            return;
+        }
+
+        var random = new Random(11);
+        foreach (var format in new[] { System.Drawing.Imaging.PixelFormat.Format32bppArgb, System.Drawing.Imaging.PixelFormat.Format32bppPArgb })
+        {
+            foreach (var (width, height) in new[] { (1920, 480), (64, 24), (8, 8) })
+            {
+                using var source = new Bitmap(width, height, format);
+                var data = source.LockBits(new Rectangle(0, 0, width, height), System.Drawing.Imaging.ImageLockMode.WriteOnly, format);
+                var row = new int[width];
+                for (var y = 0; y < height; y++)
+                {
+                    for (var x = 0; x < width; x++)
+                    {
+                        // Opaque in the premultiplied format, so every value is a valid pixel there.
+                        row[x] = unchecked((int)(0xFF000000u | (uint)random.Next(0, 0x1000000)));
+                    }
+
+                    System.Runtime.InteropServices.Marshal.Copy(row, 0, data.Scan0 + (y * data.Stride), width);
+                }
+
+                source.UnlockBits(data);
+                foreach (var (rotation, flip) in new[] { (90, RotateFlipType.Rotate90FlipNone), (270, RotateFlipType.Rotate270FlipNone) })
+                {
+                    using var expected = (Bitmap)source.Clone();
+                    expected.RotateFlip(flip);
+                    using var turned = ScreenFrames.Turned(source, rotation).ShouldNotBeNull();
+                    turned.PixelFormat.ShouldBe(format);
+                    turned.Size.ShouldBe(expected.Size);
+                    Pixels(turned).ShouldBe(Pixels(expected), $"{format} {width}x{height} turned {rotation}");
+
+                    // Into a picture given back (here one holding other pixels): the same picture, all of it drawn again.
+                    using var given = new Bitmap(height, width, format);
+                    using (var g = Graphics.FromImage(given))
+                    {
+                        g.Clear(Color.Magenta);
+                    }
+
+                    ScreenFrames.Turned(source, rotation, given).ShouldBeSameAs(given);
+                    Pixels(given).ShouldBe(Pixels(expected), $"{format} {width}x{height} turned {rotation} into a picture given");
+                    using var wrongSize = new Bitmap(width, height, format);
+                    using var made = ScreenFrames.Turned(source, rotation, width == height ? null : wrongSize).ShouldNotBeNull();
+                    made.ShouldNotBeSameAs(wrongSize);
+                }
+            }
+        }
+
+        // What it does not turn (RotateFlip then does, as before).
+        using var odd = new Bitmap(12, 8, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        ScreenFrames.Turned(odd, 90).ShouldBeNull();
+        using var square = new Bitmap(16, 8, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+        ScreenFrames.Turned(square, 180).ShouldBeNull();
+        using var plain = new Bitmap(16, 8, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+        ScreenFrames.Turned(plain, 90).ShouldBeNull();
+
+        static int[] Pixels(Bitmap bitmap)
+        {
+            var data = bitmap.LockBits(new Rectangle(0, 0, bitmap.Width, bitmap.Height), System.Drawing.Imaging.ImageLockMode.ReadOnly, bitmap.PixelFormat);
+            var pixels = new int[bitmap.Width * bitmap.Height];
+            for (var y = 0; y < bitmap.Height; y++)
+            {
+                System.Runtime.InteropServices.Marshal.Copy(data.Scan0 + (y * data.Stride), pixels, y * bitmap.Width, bitmap.Width);
+            }
+
+            bitmap.UnlockBits(data);
+            return pixels;
+        }
+    }
+
+    [Fact]
     public void The_program_holding_a_screen_is_paused_written_down_first_and_started_again_in_the_opposite_order()
     {
         var file = Path.Combine(Path.GetTempPath(), "pcdiag-tests", Guid.NewGuid().ToString("N"), "screen-holders.json");
